@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+// Prisma removed
 import {
   Controller,
   Get,
@@ -35,12 +35,15 @@ export class ProductController {
   }
 
   @Post()
-  create(@Body() data: Prisma.ProductCreateInput) {
+  create(@Body() data: import('./dto/create-product.dto').CreateProductDto) {
     return this.productService.create(data);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() data: Prisma.ProductUpdateInput) {
+  update(
+    @Param('id') id: string,
+    @Body() data: import('./dto/update-product.dto').UpdateProductDto,
+  ) {
     return this.productService.update(id, data);
   }
 
@@ -51,7 +54,7 @@ export class ProductController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  uploadImage(@UploadedFile() file: any) {
+  uploadImage(@UploadedFile() file: Express.Multer.File) {
     const url = this.imageService.uploadImage(file);
     return { url };
   }

@@ -16,11 +16,10 @@ export class FeedbackController {
   @UseGuards(JwtAuthGuard)
   @Post()
   async create(
-    @Request() req: any,
+    @Request() req: import('express').Request & { user: { userId: string } },
     @Body() data: { orderId: string; rating: number; comment?: string },
   ) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const userId = req.user.userId as string;
+    const userId = req.user.userId;
     return this.feedbackService.create({
       ...data,
       userId,

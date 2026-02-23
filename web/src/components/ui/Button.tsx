@@ -21,7 +21,7 @@ export const Button: React.FC<ButtonProps> = ({
 
     return (
         <button
-            className={`${baseStyles} ${variants[variant]} ${className} disabled:opacity-50`}
+            className={`${baseStyles} ${variants[variant]} ${className} disabled:opacity-50 focus:outline-none focus-visible:ring-4 focus-visible:ring-puculuxa-orange/50 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 transition-shadow`}
             disabled={isLoading || props.disabled}
             {...props}
         >

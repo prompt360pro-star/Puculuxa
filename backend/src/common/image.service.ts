@@ -16,7 +16,8 @@ export class ImageService {
   getStorage() {
     // multer-storage-cloudinary v2 uses default export or .CloudinaryStorage
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const CloudinaryStorage = multerStorageCloudinary.CloudinaryStorage || multerStorageCloudinary;
+    const CloudinaryStorage =
+      multerStorageCloudinary.CloudinaryStorage || multerStorageCloudinary;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     return new CloudinaryStorage({
       cloudinary: cloudinary,
@@ -27,8 +28,7 @@ export class ImageService {
     });
   }
 
-  uploadImage(file: any): string {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
-    return file.path || file.secure_url;
+  uploadImage(file: Express.Multer.File & { secure_url?: string }): string {
+    return file.path || file.secure_url || '';
   }
 }

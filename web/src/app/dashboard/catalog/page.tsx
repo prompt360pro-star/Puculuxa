@@ -101,7 +101,7 @@ export default function CatalogPage() {
                             <th className="p-6 text-right">Ações</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-surface">
+                    <tbody className="divide-y divide-border-main">
                         {loading ? (
                             <tr>
                                 <td colSpan={5} className="p-12 text-center text-text-secondary">

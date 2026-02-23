@@ -42,7 +42,7 @@ export const Sidebar = () => {
                             className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group ${isActive
                                 ? 'bg-puculuxa-orange/10 text-puculuxa-orange font-bold'
                                 : 'text-text-secondary hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-text-primary'
-                                }`}
+                                } focus:outline-none focus-visible:ring-2 focus-visible:ring-puculuxa-orange focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900`}
                         >
                             <item.icon
                                 size={22}
@@ -61,7 +61,7 @@ export const Sidebar = () => {
 
                 <button
                     onClick={() => AuthWebService.logout()}
-                    className="w-full flex items-center gap-4 p-4 rounded-2xl text-text-secondary hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-500 transition-all group"
+                    className="w-full flex items-center gap-4 p-4 rounded-2xl text-text-secondary hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-500 transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                 >
                     <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center overflow-hidden">
                         <Users size={20} />

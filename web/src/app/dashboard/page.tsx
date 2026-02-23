@@ -12,8 +12,20 @@ import { DashboardService, DashboardStats, RecentOrder } from '@/services/dashbo
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { SmartInbox } from '@/components/SmartInbox';
-import { DashboardHeader } from '@/components/DashboardHeader';
+import dynamic from 'next/dynamic';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DashboardHeader = dynamic(() => import('@/components/DashboardHeader').then((mod) => mod.DashboardHeader as any), {
+    ssr: false,
+    loading: () => <div className="h-20 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-2xl mb-8"></div>
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SmartInbox = dynamic(() => import('@/components/SmartInbox').then((mod) => mod.SmartInbox as any), {
+    ssr: false,
+    loading: () => <div className="h-64 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-3xl"></div>
+});
+
 import { cookies } from 'next/headers';
 
 export default async function DashboardPage() {

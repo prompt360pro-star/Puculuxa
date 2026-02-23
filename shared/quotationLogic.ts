@@ -23,10 +23,19 @@ export const COMPLEMENTS = {
     DECORATION: { id: 'decoration', name: 'Decoração Temática', fixedPrice: 500 },
 } as const;
 
+export interface ComplementInput {
+    id?: string;
+    name?: string;
+    pricePerUnit?: number;
+    quantity?: number;
+    pricePerGuest?: number;
+    fixedPrice?: number;
+}
+
 interface CalculationInput {
     eventType: string;
     guestCount: number;
-    complements?: any[];
+    complements?: (string | ComplementInput)[];
 }
 
 /**
@@ -36,13 +45,26 @@ export const calculateQuotation = ({ eventType, guestCount, complements = [] }: 
     let basePrice = BASE_PRICES[eventType] || 0;
     let total = basePrice * guestCount;
 
-    complements.forEach(comp => {
-        if (comp.pricePerUnit) {
-            total += comp.pricePerUnit * (comp.quantity || 1);
-        } else if (comp.pricePerGuest) {
-            total += comp.pricePerGuest * guestCount;
-        } else if (comp.fixedPrice) {
-            total += comp.fixedPrice;
+    complements.forEach(compItem => {
+        let comp: ComplementInput | undefined;
+
+        if (typeof compItem === 'string') {
+            const key = Object.keys(COMPLEMENTS).find(k => COMPLEMENTS[k as keyof typeof COMPLEMENTS].id === compItem);
+            if (key) {
+                comp = COMPLEMENTS[key as keyof typeof COMPLEMENTS] as ComplementInput;
+            }
+        } else {
+            comp = compItem;
+        }
+
+        if (comp) {
+            if (comp.pricePerUnit) {
+                total += comp.pricePerUnit * (comp.quantity || 1);
+            } else if (comp.pricePerGuest) {
+                total += comp.pricePerGuest * guestCount;
+            } else if (comp.fixedPrice) {
+                total += comp.fixedPrice;
+            }
         }
     });
 

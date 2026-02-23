@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PdfService {
-  generateQuotationPdf(quotation: any, res: Response) {
+  generateQuotationPdf(
+    quotation: Prisma.QuotationGetPayload<object>,
+    res: Response,
+  ) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
     // Stream the PDF to the response

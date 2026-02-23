@@ -83,7 +83,7 @@ export const SmartInbox: React.FC = () => {
                                     {alert.description}
                                 </p>
                                 <div className="pt-3 flex items-center gap-3">
-                                    <button className="text-xs font-black text-puculuxa-orange hover:text-puculuxa-gold transition-colors flex items-center gap-1 uppercase tracking-wider">
+                                    <button className="text-xs font-black text-puculuxa-orange hover:text-puculuxa-gold transition-colors flex items-center gap-1 uppercase tracking-wider focus:outline-none focus-visible:ring-2 focus-visible:ring-puculuxa-orange rounded">
                                         {alert.actionLabel}
                                         <ArrowUpRight size={14} />
                                     </button>
@@ -96,7 +96,7 @@ export const SmartInbox: React.FC = () => {
             </div>
 
             <div className="p-4 bg-bg-card border-t border-border-main text-center">
-                <button className="text-xs font-bold text-text-secondary hover:text-puculuxa-orange transition-colors uppercase tracking-widest">
+                <button className="text-xs font-bold text-text-secondary hover:text-puculuxa-orange transition-colors uppercase tracking-widest focus:outline-none focus-visible:ring-2 focus-visible:ring-puculuxa-orange/50 rounded px-2 py-1">
                     Ver todas as decisões pendentes
                 </button>
             </div>
