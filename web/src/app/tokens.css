@@ -1,0 +1,48 @@
+/* Auto-generated from @puculuxa/shared. DO NOT EDIT. */
+
+:root {
+  /* Colors */
+  --color-primary: #FF8C42;
+  --color-secondary: #8BAE3E;
+  --color-accent: #6B8E23;
+  --color-gradient-start: #FF8C42;
+  --color-gradient-mid: #FFD700;
+  --color-gradient-end: #8BAE3E;
+  --color-background: #FFFEF7;
+  --color-surface: #FFF8E1;
+  --color-detail: #FFD8B8;
+  --color-positive: #E8F5E9;
+  --color-text-secondary: #8D8174;
+  --color-text-primary: #6B8E23;
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 32px;
+  --spacing-huge: 48px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+}
+
+:root {
+  /* Semantic Aliases */
+  --puculuxa-orange: var(--color-primary);
+  --puculuxa-gold: var(--color-gradient-mid);
+  --puculuxa-lime: var(--color-secondary);
+  --puculuxa-olive: var(--color-accent);
+  --puculuxa-cream: var(--color-background);
+  --bg-main: var(--color-background);
+  --bg-card: var(--color-white);
+  --text-primary: var(--color-black);
+  --text-secondary: var(--color-text-secondary);
+}

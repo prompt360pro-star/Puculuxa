@@ -1,0 +1,23 @@
+{
+    "name": "puculuxa-root",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+        "backend",
+        "web",
+        "mobile",
+        "shared"
+    ],
+    "scripts": {
+        "build": "npm run build --workspaces",
+        "test": "npm run test --workspaces",
+        "dev": "concurrently \"npm run start --workspace=backend\" \"npm run dev --workspace=web\" --names \"BACKEND-4001,FRONTEND-4000\" --prefix-colors \"blue,magenta\" --kill-others",
+        "dev:lite": "concurrently \"npm run start:lite --workspace=backend\" \"npm run dev:lite --workspace=web\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,magenta\" --kill-others",
+        "dev:web": "npm run dev --workspace=web",
+        "dev:backend": "npm run start:dev --workspace=backend"
+    },
+    "devDependencies": {
+        "concurrently": "^9.2.1",
+        "cross-env": "^10.1.0"
+    }
+}
