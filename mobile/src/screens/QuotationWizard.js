@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions } from 'react-native';
-import { ChevronRight, ChevronLeft, CheckCircle, Calculator, Sparkles, Wand2 } from 'lucide-react-native';
+import { ChevronRight, ChevronLeft, CheckCircle, Calculator, Sparkles, Wand2, User, Image as ImageIcon } from 'lucide-react-native';
 import { Theme } from '../theme';
 import { calculateQuotation, EVENT_TYPES } from '@puculuxa/shared';
 import { ApiService } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
 
 export const QuotationWizard = ({ navigation }) => {
+    const { user } = useAuthStore();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -15,7 +18,11 @@ export const QuotationWizard = ({ navigation }) => {
         guestCount: '',
         date: '',
         complements: [],
+        customerName: user?.name || '',
+        customerPhone: user?.phone || '',
     });
+    const [imageUri, setImageUri] = useState(null);
+
 
     // Animation values
     const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -83,6 +90,19 @@ export const QuotationWizard = ({ navigation }) => {
         });
     };
 
+    const pickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            setImageUri(result.assets[0].uri);
+        }
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
         try {
@@ -92,8 +112,15 @@ export const QuotationWizard = ({ navigation }) => {
                 complements: formData.complements
             });
 
+            let referenceImage = null;
+            if (imageUri) {
+                const uploadRes = await ApiService.uploadQuotationImage(imageUri);
+                referenceImage = uploadRes.url;
+            }
+
             const response = await ApiService.postQuotation({
                 ...formData,
+                referenceImage,
                 ...calculation
             });
 
@@ -198,6 +225,14 @@ export const QuotationWizard = ({ navigation }) => {
                             value={formData.date}
                             onChangeText={(text) => setFormData({ ...formData, date: text })}
                         />
+
+                        <Text style={styles.stepTitle}>Imagem de Referência (Opcional)</Text>
+                        <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage} activeOpacity={0.8}>
+                            <ImageIcon size={24} color={Theme.colors.primary} />
+                            <Text style={styles.imagePickerText}>
+                                {imageUri ? 'Imagem Selecionada (Tocar para Mudar)' : 'Selecionar Imagem de Inspiração'}
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 )}
 
@@ -242,6 +277,12 @@ export const QuotationWizard = ({ navigation }) => {
                                 <Text style={styles.summaryLabel}>Convidados</Text>
                                 <Text style={styles.summaryValue}>{formData.guestCount}</Text>
                             </View>
+                            {imageUri && (
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Imagem de Referência</Text>
+                                    <Text style={styles.summaryValue}>Anexada ✅</Text>
+                                </View>
+                            )}
 
                             <View style={styles.divider} />
 
@@ -404,6 +445,25 @@ const styles = StyleSheet.create({
         borderColor: Theme.colors.surface,
         color: Theme.colors.textPrimary,
         ...Theme.shadows.light,
+    },
+    imagePickerButton: {
+        backgroundColor: 'white',
+        height: 56,
+        borderRadius: Theme.radius.lg,
+        paddingHorizontal: Theme.spacing.lg,
+        marginBottom: Theme.spacing.xl,
+        borderWidth: 1,
+        borderColor: Theme.colors.primary + '40',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...Theme.shadows.light,
+    },
+    imagePickerText: {
+        fontSize: 16,
+        color: Theme.colors.primary,
+        fontWeight: '500',
+        marginLeft: 12,
     },
     checkbox: {
         width: 24,

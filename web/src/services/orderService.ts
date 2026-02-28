@@ -11,12 +11,13 @@ const getHeaders = () => ({
 import { Order } from '@/types';
 
 export const OrderWebService = {
-    async getAll(): Promise<Order[]> {
+    async getAll(page: number = 1, limit: number = 20): Promise<Order[]> {
         try {
-            const response = await fetch(`${BASE_URL}/orders`, {
+            const response = await fetch(`${BASE_URL}/orders?page=${page}&limit=${limit}`, {
                 headers: getHeaders()
             });
-            return await response.json();
+            const result = await response.json();
+            return result.data || [];
         } catch (error) {
             console.error('Error fetching orders:', error);
             return [];

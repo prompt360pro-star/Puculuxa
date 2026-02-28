@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChefHat, MessageSquare, PieChart, LayoutDashboard, ClipboardList, Store, Users, Settings, LogOut } from 'lucide-react';
+import { ChefHat, MessageSquare, PieChart, LayoutDashboard, ClipboardList, Store, Users, Settings, LogOut, FileText } from 'lucide-react';
 import { AuthWebService } from '@/services/authService';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -13,6 +13,7 @@ export const Sidebar = () => {
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
         { icon: ClipboardList, label: 'Pedidos', href: '/dashboard/orders' },
+        { icon: FileText, label: 'Orçamentos', href: '/dashboard/quotations' },
         { icon: Store, label: 'Catálogo', href: '/dashboard/catalog' },
         { icon: Users, label: 'Clientes', href: '/dashboard/customers' },
         { icon: PieChart, label: 'Relatórios', href: '/dashboard/stats' },
@@ -21,7 +22,7 @@ export const Sidebar = () => {
     ];
 
     return (
-        <aside className="w-72 bg-bg-card border-r border-border-main flex flex-col h-screen sticky top-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] transition-colors duration-300">
+        <aside className="w-72 bg-bg-card/80 backdrop-blur-xl border border-white/20 dark:border-white/10 m-4 rounded-[2rem] flex flex-col h-[calc(100vh-2rem)] sticky top-4 shadow-elite transition-all duration-500 overflow-hidden z-20">
             {/* Branding Section */}
             <div className="p-10 flex flex-col items-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-puculuxa-orange to-puculuxa-gold rounded-[2rem] flex items-center justify-center shadow-puculuxa mb-5 rotate-3 hover:rotate-0 transition-transform duration-500">
@@ -39,17 +40,22 @@ export const Sidebar = () => {
                         <Link
                             key={item.label}
                             href={item.href}
-                            className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group ${isActive
-                                ? 'bg-puculuxa-orange/10 text-puculuxa-orange font-bold'
-                                : 'text-text-secondary hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-text-primary'
-                                } focus:outline-none focus-visible:ring-2 focus-visible:ring-puculuxa-orange focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900`}
+                            className={`relative flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group overflow-hidden ${isActive
+                                ? 'text-white font-bold shadow-puculuxa'
+                                : 'text-text-secondary hover:text-text-primary'
+                                } focus:outline-none focus-visible:ring-2 focus-visible:ring-puculuxa-orange`}
                         >
-                            <item.icon
-                                size={22}
-                                className={`transition-transform duration-300 ${isActive ? 'scale-110 text-puculuxa-orange' : 'text-text-secondary group-hover:scale-110 group-hover:text-text-primary'}`}
-                            />
-                            <span className="text-[15px]">{item.label}</span>
-                            {isActive && <div className="ml-auto w-1.5 h-6 bg-puculuxa-orange rounded-full" />}
+                            {/* Animated Background Pill */}
+                            <div className={`absolute inset-0 transition-all duration-500 rounded-2xl ${isActive ? 'bg-gradient-to-r from-puculuxa-orange to-puculuxa-gold opacity-100' : 'bg-slate-100 dark:bg-slate-800/50 opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100'}`} />
+
+                            {/* Content */}
+                            <div className="relative z-10 flex items-center gap-4 w-full">
+                                <item.icon
+                                    size={22}
+                                    className={`transition-transform duration-500 ${isActive ? 'scale-110 text-white' : 'text-text-secondary group-hover:scale-110 group-hover:text-puculuxa-orange'}`}
+                                />
+                                <span className="text-[15px]">{item.label}</span>
+                            </div>
                         </Link>
                     );
                 })}

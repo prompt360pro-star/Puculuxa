@@ -17,6 +17,11 @@
 
   --shadow-elite: 0 20px 60px rgba(0, 0, 0, 0.12);
   --shadow-puculuxa: 0 8px 24px rgba(255, 140, 66, 0.15);
+  --shadow-glow: 0 0 20px rgba(255, 140, 66, 0.4);
+
+  /* Fonts */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-heading: var(--font-outfit), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
   /* Animations */
   @keyframes fade-in-up {
@@ -94,7 +99,7 @@
   }
 
   .glass-card {
-    @apply bg-bg-card/80 backdrop-blur-md border border-border-main rounded-3xl shadow-elite;
+    @apply bg-bg-card/80 backdrop-blur-md border border-border-main rounded-3xl shadow-elite transition-all duration-300 hover:shadow-2xl hover:bg-bg-card/90;
   }
 }
 
@@ -104,7 +109,8 @@ h3,
 h4,
 h5 {
   color: var(--text-primary);
-  font-family: inherit;
+  font-family: var(--font-heading);
+  letter-spacing: -0.025em;
 }
 
 .scalloped-border {

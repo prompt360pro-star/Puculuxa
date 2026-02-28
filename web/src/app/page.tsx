@@ -51,12 +51,12 @@ export default function LandingPage() {
           </Link>
 
           <div className="flex items-center justify-center gap-4 text-sm text-slate-500">
-            <Link href="/support" className="flex items-center gap-1 hover:text-puculuxa-orange transition-colors">
+            <a href="mailto:suporte@puculuxa.ao" className="flex items-center gap-1 hover:text-puculuxa-orange transition-colors">
               <HelpCircle size={16} />
               Precisa de ajuda?
-            </Link>
+            </a>
             <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-            <span>Suporte Técnico</span>
+            <span>suporte@puculuxa.ao</span>
           </div>
         </div>
 

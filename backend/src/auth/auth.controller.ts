@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   UnauthorizedException,
   Get,
@@ -17,10 +18,9 @@ import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('login')
-  @UsePipes(new ValidationPipe())
   @UsePipes(new ValidationPipe())
   async login(@Body() loginDto: LoginDto) {
     const user = await this.authService.validateUser(
@@ -33,6 +33,18 @@ export class AuthController {
     return this.authService.login(user);
   }
 
+  @Post('refresh')
+  async refresh(@Body() body: { userId: string, refreshToken: string }) {
+    if (!body.userId || !body.refreshToken) {
+      throw new UnauthorizedException('Missing refresh token or user id');
+    }
+    const result = await this.authService.refreshToken(body.userId, body.refreshToken);
+    if (!result) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    return result;
+  }
+
   @Post('register')
   @UsePipes(new ValidationPipe())
   async register(@Body() registerDto: RegisterDto) {
@@ -41,9 +53,31 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('profile')
-  @Get('profile')
-  getProfile(@Request() req: { user: unknown }) {
+  getProfile(@Request() req: { user: { id: string; userId?: string } }) {
     return req.user;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  updateProfile(
+    @Request() req: { user: { id?: string; userId?: string } },
+    @Body() body: { name?: string; phone?: string; address?: string },
+  ) {
+    const id = req.user.id || req.user.userId;
+    return this.authService.updateProfile(id!, body);
+  }
+
+  @Post('forgot-password')
+  forgotPassword(@Body('email') email: string) {
+    return this.authService.requestPasswordReset(email);
+  }
+
+  @Post('reset-password')
+  resetPassword(
+    @Body('token') token: string,
+    @Body('newPassword') newPassword: string,
+  ) {
+    return this.authService.resetPassword(token, newPassword);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

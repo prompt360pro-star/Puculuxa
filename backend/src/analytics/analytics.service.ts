@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getDashboardStats() {
     const [
@@ -38,15 +38,44 @@ export class AnalyticsService {
       include: { user: true },
     });
 
-    const revenueByMonth = await this.prisma.order.findMany({
-      select: {
-        total: true,
-        createdAt: true,
-      },
-      where: {
-        status: 'COMPLETED',
-      },
-    });
+    // Agregação movida do NodeJS/Frontend para o SQLite
+    // Extratos de 'revenueByMonth' agrupados nativamente
+    const revenueByMonthRaw = await this.prisma.$queryRaw<
+      { month: string; total: number }[]
+    >`
+      SELECT 
+        strftime('%Y-%m', createdAt) as month, 
+        SUM(total) as total
+      FROM "Order"
+      WHERE status = 'DELIVERED'
+      GROUP BY strftime('%Y-%m', createdAt)
+      ORDER BY month ASC
+    `;
+
+    // Normalizing SQLite BigInt/Numeric responses
+    const revenueByMonth = revenueByMonthRaw.map((row) => ({
+      month: row.month,
+      total: Number(row.total),
+    }));
+
+    // Sales by Category
+    const categoryDataRaw = await this.prisma.$queryRaw<
+      { name: string; value: number }[]
+    >`
+      SELECT 
+        p.category as name,
+        SUM(oi.price * oi.quantity) as value
+      FROM "OrderItem" oi
+      JOIN "Product" p ON oi.productId = p.id
+      JOIN "Order" o ON oi.orderId = o.id
+      WHERE o.status = 'DELIVERED'
+      GROUP BY p.category
+    `;
+
+    const categoryData = categoryDataRaw.map((row) => ({
+      name: row.name || 'Outros',
+      value: Number(row.value),
+    }));
 
     return {
       counters: {
@@ -59,7 +88,8 @@ export class AnalyticsService {
         revenue: totalRevenue._sum.total || 0,
       },
       recentOrders,
-      revenueByMonth, // No frontend isso poderá ser agrupado
+      revenueByMonth,
+      categoryData,
     };
   }
 }

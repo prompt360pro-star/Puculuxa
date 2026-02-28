@@ -44,5 +44,24 @@ export const ReviewService = {
         }
 
         return response.json();
+    },
+
+    async replyToFeedback(id: string, adminReply: string) {
+        const token = AuthWebService.getToken();
+        const response = await fetch(`${BASE_URL}/${id}/reply`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ adminReply })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Falha ao responder avaliação');
+        }
+
+        return response.json();
     }
 };

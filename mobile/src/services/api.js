@@ -1,7 +1,8 @@
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://localhost:3000';
+// Substitua "localhost" pelo IP da sua máquina (ex: 192.168.0.x) se for testar num telemóvel físico via Expo Go
+const BASE_URL = 'http://localhost:4001/api';
 
 const getHeaders = async () => {
     const token = await AsyncStorage.getItem('puculuxa_token');
@@ -76,21 +77,62 @@ export const ApiService = {
         }
     },
 
-    async getProducts() {
+    async uploadQuotationImage(uri) {
         try {
-            const response = await fetch(`${BASE_URL}/products`, {
-                headers: await getHeaders(),
+            const formData = new FormData();
+            formData.append('file', {
+                uri,
+                name: 'reference.jpg',
+                type: 'image/jpeg'
             });
-            if (!response.ok) return [];
+
+            const token = await AsyncStorage.getItem('puculuxa_token');
+            const response = await fetch(`${BASE_URL}/quotations/upload`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': token ? `Bearer ${token}` : '',
+                },
+                body: formData,
+            });
+
+            if (!response.ok) throw new Error('Falha ao enviar imagem');
             return await response.json();
         } catch (error) {
-            console.error('API Error:', error);
-            return [];
+            console.error('Upload Error:', error);
+            throw error;
         }
+    },
+
+    async getProducts() {
+        const response = await fetch(`${BASE_URL}/products`, {
+            headers: await getHeaders(),
+        });
+        if (!response.ok) throw new Error('Falha ao buscar produtos');
+        const result = await response.json();
+        // A API Backend agora retorna paginação: { data: [...], meta: {...} }
+        return result.data || result;
+    },
+
+    async getMyOrders() {
+        const response = await fetch(`${BASE_URL}/orders/my`, {
+            headers: await getHeaders(),
+        });
+        if (!response.ok) throw new Error('Falha ao buscar histórico de pedidos');
+        return await response.json();
     },
 
     async getUser() {
         const user = await AsyncStorage.getItem('puculuxa_user');
         return user ? JSON.parse(user) : null;
+    },
+
+    async updateProfile(data) {
+        const response = await fetch(`${BASE_URL}/auth/profile`, {
+            method: 'PATCH',
+            headers: await getHeaders(),
+            body: JSON.stringify(data),
+        });
+        if (!response.ok) throw new Error('Falha ao actualizar perfil');
+        return await response.json();
     }
 };

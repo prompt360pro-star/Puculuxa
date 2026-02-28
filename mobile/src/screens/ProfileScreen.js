@@ -1,11 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Settings, Heart, History, LogOut, ChevronRight } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Theme } from '../theme';
 import { useAuthStore } from '../store/authStore';
 
 export const ProfileScreen = () => {
     const { user, logout } = useAuthStore();
+    const navigation = useNavigation();
 
     const handleLogout = () => {
         Alert.alert('Sair', 'Tem certeza que deseja sair?', [
@@ -36,7 +38,7 @@ export const ProfileScreen = () => {
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Minhas Atividades</Text>
 
-                <TouchableOpacity style={styles.menuItem}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('OrderHistory')}>
                     <View style={[styles.iconBox, { backgroundColor: Theme.colors.surface }]}>
                         <History size={20} color={Theme.colors.primary} />
                     </View>
@@ -44,7 +46,7 @@ export const ProfileScreen = () => {
                     <ChevronRight size={20} color={Theme.colors.textSecondary} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.menuItem}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
                     <View style={[styles.iconBox, { backgroundColor: '#FCE4EC' }]}>
                         <Heart size={20} color="#F06292" />
                     </View>
@@ -56,7 +58,7 @@ export const ProfileScreen = () => {
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Configurações</Text>
 
-                <TouchableOpacity style={styles.menuItem}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
                     <View style={[styles.iconBox, { backgroundColor: '#E8E8E8' }]}>
                         <Settings size={20} color={Theme.colors.textSecondary} />
                     </View>

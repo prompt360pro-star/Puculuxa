@@ -13,7 +13,7 @@
   --color-detail: #FFD8B8;
   --color-positive: #E8F5E9;
   --color-text-secondary: #8D8174;
-  --color-text-primary: #6B8E23;
+  --color-text-primary: #1e293b;
   --color-white: #FFFFFF;
   --color-black: #000000;
 
@@ -43,6 +43,7 @@
   --puculuxa-cream: var(--color-background);
   --bg-main: var(--color-background);
   --bg-card: var(--color-white);
-  --text-primary: var(--color-black);
+  --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
+  --border-main: #e2e8f0;
 }

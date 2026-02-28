@@ -19,10 +19,58 @@ import {
 import { SplashScreen } from './src/screens/SplashScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { QuotationWizard } from './src/screens/QuotationWizard';
+import { OrderHistoryScreen } from './src/screens/OrderHistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
+import { EditProfileScreen } from './src/screens/EditProfileScreen';
+import { FavoritesScreen } from './src/screens/FavoritesScreen';
+import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
 import { useAuthStore } from './src/store/authStore';
+import { QueryProvider } from './src/providers/QueryProvider';
+import * as Device from 'expo-device';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
+
+// Configure simple notification permissions
+async function registerForPushNotificationsAsync() {
+    let token;
+    if (Device.isDevice) {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            console.log('Failed to get push token for push notification!');
+            return;
+        }
+        token = (await Notifications.getExpoPushTokenAsync({
+            projectId: 'puculuxa-mobile', // dummy project id if not using EAS
+        })).data;
+        console.log('Expo Push Token:', token);
+    }
+
+    if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#e11d48',
+        });
+    }
+
+    return token;
+}
 
 const Stack = createStackNavigator();
 
@@ -48,6 +96,9 @@ export default function App() {
         }
         loadFonts();
         restoreSession();
+
+        // Setup Push Notifications
+        registerForPushNotificationsAsync();
     }, []);
 
     if (!fontsLoaded) {
@@ -55,24 +106,30 @@ export default function App() {
     }
 
     return (
-        <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-                {!isAuthenticated ? (
-                    // Auth Stack
-                    <>
-                        <Stack.Screen name="Splash" component={SplashScreen} />
-                        <Stack.Screen name="Login" component={LoginScreen} />
-                        <Stack.Screen name="Register" component={RegisterScreen} />
-                    </>
-                ) : (
-                    // App Stack
-                    <>
-                        <Stack.Screen name="Home" component={HomeScreen} />
-                        <Stack.Screen name="Quotation" component={QuotationWizard} />
-                        <Stack.Screen name="Profile" component={ProfileScreen} />
-                    </>
-                )}
-            </Stack.Navigator>
-        </NavigationContainer>
+        <QueryProvider>
+            <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    {!isAuthenticated ? (
+                        // Auth Stack
+                        <>
+                            <Stack.Screen name="Splash" component={SplashScreen} />
+                            <Stack.Screen name="Login" component={LoginScreen} />
+                            <Stack.Screen name="Register" component={RegisterScreen} />
+                        </>
+                    ) : (
+                        // App Stack
+                        <>
+                            <Stack.Screen name="Home" component={HomeScreen} />
+                            <Stack.Screen name="Quotation" component={QuotationWizard} />
+                            <Stack.Screen name="OrderHistory" component={OrderHistoryScreen} />
+                            <Stack.Screen name="Profile" component={ProfileScreen} />
+                            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                            <Stack.Screen name="Favorites" component={FavoritesScreen} />
+                            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+                        </>
+                    )}
+                </Stack.Navigator>
+            </NavigationContainer>
+        </QueryProvider>
     );
 }

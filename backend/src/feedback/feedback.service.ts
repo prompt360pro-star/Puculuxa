@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FeedbackService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async create(data: {
     orderId: string;
@@ -31,5 +31,15 @@ export class FeedbackService {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _pid = productId;
     return this.findAll();
+  }
+
+  async replyToFeedback(id: string, adminReply: string) {
+    return this.prisma.feedback.update({
+      where: { id },
+      data: {
+        adminReply,
+        repliedAt: new Date(),
+      },
+    });
   }
 }

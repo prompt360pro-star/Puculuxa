@@ -3,13 +3,15 @@ import { calculateQuotation } from '@puculuxa/shared';
 import { PdfService } from '../common/pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class QuotationService {
   constructor(
     private readonly pdfService: PdfService,
     private prisma: PrismaService,
-  ) {}
+    private events: EventsGateway,
+  ) { }
 
   async create(data: CreateQuotationDto) {
     const result = calculateQuotation({
@@ -27,8 +29,11 @@ export class QuotationService {
         status: 'PENDING',
         customerName: data.customerName || 'Anonymous',
         customerPhone: data.customerPhone || '',
+        referenceImage: data.referenceImage || null,
       },
     });
+
+    this.events.notifyAdmins('new_quotation', newQuotation);
 
     return newQuotation;
   }
@@ -49,5 +54,15 @@ export class QuotationService {
     }
 
     return quotation;
+  }
+
+  async updateStatus(id: string, status: string) {
+    await this.findOne(id); // ensures it exists or throws
+    const updated = await this.prisma.quotation.update({
+      where: { id },
+      data: { status },
+    });
+    this.events.notifyAdmins('quotation_status_update', updated);
+    return updated;
   }
 }

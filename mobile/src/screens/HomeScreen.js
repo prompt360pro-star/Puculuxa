@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
     View,
     Text,
@@ -7,23 +7,26 @@ import {
     TextInput,
     TouchableOpacity,
     Image,
-    FlatList,
     Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { Search, ShoppingCart, User, Cake, Cookie, UtensilsCrossed, Star } from 'lucide-react-native';
-import { ActivityIndicator as RNActivityIndicator } from 'react-native';
+import { Search, ShoppingCart, User, UtensilsCrossed, Heart } from 'lucide-react-native';
 import { Theme } from '../theme';
-import { PRODUCTS, CATEGORIES } from '../data/sampleProducts';
+import { Skeleton } from '../components/ui/Skeleton';
+import { useQuery } from '@tanstack/react-query';
+import { ApiService } from '../services/api';
+import { useFavoritesStore } from '../store/favoritesStore';
+
 
 const { width } = Dimensions.get('window');
 
-const CategoryItem = ({ name, icon, active }) => (
-    <TouchableOpacity style={[styles.categoryCard, active && styles.categoryCardActive]}>
+const EMOJI_MAP = { 'Bolos': 'ðŸŽ‚', 'Salgados': 'ðŸ¥', 'Sobremesas': 'ðŸ®', 'Bebidas': 'ðŸ¥¤', 'Outros': 'ðŸ‘¨â€ðŸ³', 'Todos': 'ðŸŒŸ' };
+
+const CategoryItem = ({ name, active, onPress }) => (
+    <TouchableOpacity style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={onPress}>
         <View style={[styles.categoryIconContainer, active && styles.categoryIconActive]}>
-            {/* Simplificando os ícones para demonstração */}
-            <Text style={{ fontSize: 24 }}>{icon === 'cake' ? '🍰' : icon === 'cookie' ? '🍪' : icon === 'croissant' ? '🥐' : '👨‍🍳'}</Text>
+            <Text style={{ fontSize: 24 }}>{EMOJI_MAP[name] || 'ðŸ°'}</Text>
         </View>
         <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{name}</Text>
     </TouchableOpacity>
@@ -31,24 +34,30 @@ const CategoryItem = ({ name, icon, active }) => (
 
 const ProductCard = ({ product }) => {
     const navigation = useNavigation();
+    const { toggle, isFavorite } = useFavoritesStore();
+    const faved = isFavorite(product.id);
     return (
-        <View style={styles.productCard}>
-            <Image source={{ uri: product.image }} style={styles.productImage} />
-            <View style={styles.tagContainer}>
-                {product.tags.map(tag => (
-                    <View key={tag} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                ))}
-            </View>
+        <TouchableOpacity
+            style={styles.productCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('ProductDetail', { product })}
+        >
+            {product.image
+                ? <Image source={{ uri: product.image }} style={styles.productImage} />
+                : <View style={[styles.productImage, { backgroundColor: '#fef3e2', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 36 }}>ðŸŽ‚</Text>
+                </View>
+            }
+            <TouchableOpacity style={[styles.favBtn, faved && styles.favBtnActive]} onPress={() => toggle(product)}>
+                <Heart size={14} color={faved ? '#E57373' : '#aaa'} fill={faved ? '#E57373' : 'transparent'} />
+            </TouchableOpacity>
             <View style={styles.productInfo}>
-                <Text style={styles.productName}>{product.name}</Text>
+                <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
                 <View style={styles.priceRow}>
-                    <Text style={styles.productPrice}>{product.price}</Text>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => navigation.navigate('Quotation')}
-                    >
+                    <Text style={styles.productPrice}>
+                        {product.price ? `Kz ${Number(product.price).toLocaleString('pt-BR')}` : 'Sob consulta'}
+                    </Text>
+                    <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('Quotation')}>
                         <UtensilsCrossed size={16} color="white" />
                     </TouchableOpacity>
                 </View>
@@ -57,29 +66,28 @@ const ProductCard = ({ product }) => {
     );
 };
 
+
 export const HomeScreen = () => {
     const navigation = useNavigation();
-    const [loading, setLoading] = React.useState(true);
-    const [products, setProducts] = React.useState([]);
     const [searchTerm, setSearchTerm] = React.useState('');
+    const [selectedCategory, setSelectedCategory] = React.useState('Todos');
 
-    React.useEffect(() => {
-        const loadData = async () => {
-            try {
-                // Simulação de carregamento para mostrar o craftsmanship do loader
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                // No futuro, usar ApiService.getProducts()
-                setProducts(PRODUCTS);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
-    }, []);
+    const { data: apiProducts = [], isLoading: loading } = useQuery({
+        queryKey: ['products'],
+        queryFn: ApiService.getProducts,
+    });
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const categories = React.useMemo(() => {
+        const cats = [...new Set(apiProducts.map(p => p.category).filter(Boolean))];
+        return ['Todos', ...cats];
+    }, [apiProducts]);
+
+    const filteredProducts = apiProducts.filter(p => {
+        const matchSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCat = selectedCategory === 'Todos' || p.category === selectedCategory;
+        return matchSearch && matchCat;
+    });
+
 
     const handleStartQuotation = () => {
         navigation.navigate('Quotation');
@@ -118,7 +126,7 @@ export const HomeScreen = () => {
                     <View style={styles.searchContainer}>
                         <Search size={20} color={Theme.colors.textSecondary} style={styles.searchIcon} />
                         <TextInput
-                            placeholder="O que você está procurando?"
+                            placeholder="O que vocÃª estÃ¡ procurando?"
                             placeholderTextColor={Theme.colors.textSecondary}
                             style={styles.searchInput}
                             value={searchTerm}
@@ -133,8 +141,13 @@ export const HomeScreen = () => {
                         <Text style={styles.sectionTitle}>Nossas Categorias</Text>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesList}>
-                        {CATEGORIES.map((cat, index) => (
-                            <CategoryItem key={cat.id} {...cat} active={index === 0} />
+                        {categories.map((cat) => (
+                            <CategoryItem
+                                key={cat}
+                                name={cat}
+                                active={selectedCategory === cat}
+                                onPress={() => setSelectedCategory(cat)}
+                            />
                         ))}
                     </ScrollView>
 
@@ -147,15 +160,26 @@ export const HomeScreen = () => {
                     </View>
 
                     {loading ? (
-                        <View style={styles.loadingContainer}>
-                            <Text style={styles.loadingText}>Preparando nossas doçuras...</Text>
+                        <View style={styles.productGrid}>
+                            {[1, 2, 3, 4].map(idx => (
+                                <View key={idx} style={styles.productCard}>
+                                    <Skeleton width="100%" height={150} borderRadius={0} />
+                                    <View style={styles.productInfo}>
+                                        <Skeleton width="70%" height={16} style={{ marginBottom: 8 }} />
+                                        <View style={styles.priceRow}>
+                                            <Skeleton width="40%" height={16} />
+                                            <Skeleton width={30} height={30} borderRadius={Theme.radius.md} />
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
                     ) : filteredProducts.length === 0 ? (
                         <View style={styles.emptyContainer}>
-                            <Text style={{ fontSize: 40 }}>🧁</Text>
-                            <Text style={styles.emptyText}>Não encontramos esse bolo. Mas podemos fazer um especial para você!</Text>
+                            <Text style={{ fontSize: 40 }}>ðŸ§</Text>
+                            <Text style={styles.emptyText}>NÃ£o encontramos esse bolo. Mas podemos fazer um especial para vocÃª!</Text>
                             <TouchableOpacity style={styles.emptyButton} onPress={handleStartQuotation}>
-                                <Text style={styles.emptyButtonText}>PEDIR ORÇAMENTO PERSONALIZADO</Text>
+                                <Text style={styles.emptyButtonText}>PEDIR ORÃ‡AMENTO PERSONALIZADO</Text>
                             </TouchableOpacity>
                         </View>
                     ) : (
@@ -172,11 +196,11 @@ export const HomeScreen = () => {
             <View style={styles.bottomNav}>
                 <TouchableOpacity style={styles.navItem}>
                     <Cake size={24} color={Theme.colors.primary} />
-                    <Text style={[styles.navText, { color: Theme.colors.primary }]}>Início</Text>
+                    <Text style={[styles.navText, { color: Theme.colors.primary }]}>InÃ­cio</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navItem}>
                     <Star size={24} color={Theme.colors.textSecondary} />
-                    <Text style={styles.navText}>Catálogo</Text>
+                    <Text style={styles.navText}>CatÃ¡logo</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navItem} onPress={handleStartQuotation}>
                     <UtensilsCrossed size={24} color={Theme.colors.textSecondary} />
@@ -322,6 +346,20 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 150,
         backgroundColor: '#f0f0f0',
+    },
+    favBtn: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    favBtnActive: {
+        backgroundColor: '#FCE4EC',
     },
     tagContainer: {
         position: 'absolute',

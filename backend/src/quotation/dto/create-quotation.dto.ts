@@ -31,4 +31,8 @@ export class CreateQuotationDto {
   @IsOptional()
   @IsString()
   customerPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  referenceImage?: string;
 }

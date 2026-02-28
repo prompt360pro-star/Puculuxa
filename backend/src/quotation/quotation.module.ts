@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
-import { QuotationController } from './quotation.controller';
 import { QuotationService } from './quotation.service';
+import { QuotationController } from './quotation.controller';
+import { CommonModule } from '../common/common.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
+  imports: [CommonModule, EventsModule],
   controllers: [QuotationController],
   providers: [QuotationService],
 })

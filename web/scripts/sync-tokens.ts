@@ -1,28 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { COLORS, SPACING, RADIUS, SHADOWS } from '@puculuxa/shared';
+import { COLORS, SPACING, RADIUS } from '@puculuxa/shared';
 
 const OUTPUT_PATH = path.join(__dirname, '../src/app/tokens.css');
 
 function generateCSS() {
     let css = '/* Auto-generated from @puculuxa/shared. DO NOT EDIT. */\n\n:root {\n';
 
-    // Helper to process object keys
-    const processObj = (prefix: string, obj: any) => {
-        for (const [key, value] of Object.entries(obj)) {
-            if (typeof value === 'object') {
-                // Skip nested objects like shadow definitions for now, unless we parse them specifically
-                // SHADOWS.light is an object, we might want to skip or handle differently
-                if (key === 'light' || key === 'medium') continue;
-
-            } else if (typeof value === 'string' || typeof value === 'number') {
-                const cssVarName = `--${prefix}-${key}`;
-                // Convert camelCase to kebab-case if needed, but for now let's stick to simple mapping
-                // actually, let's just use the key as is for simplicity unless it needs hyphenation
-                css += `  ${cssVarName}: ${value}${typeof value === 'number' && prefix === 'spacing' ? 'px' : ''};\n`;
-            }
-        }
-    };
 
     // Process Colors
     // Map specific structured colors we know we need

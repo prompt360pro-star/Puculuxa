@@ -10,6 +10,8 @@ export interface DashboardStats {
     feedbacks: number;
     averageRating: string;
     counters: Record<string, number>;
+    revenueByMonth: { month: string; total: number }[];
+    categoryData: { name: string; value: number }[];
 }
 
 export interface RecentOrder {
@@ -57,7 +59,8 @@ export const DashboardService = {
         };
     },
 
-    parseStats(data: { counters: Record<string, number> }): DashboardStats {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    parseStats(data: any): DashboardStats {
         return {
             newQuotes: data.counters.quotations,
             inProduction: data.counters.orders,
@@ -67,7 +70,9 @@ export const DashboardService = {
             revenue: `Kz ${data.counters.revenue.toLocaleString('pt-BR')}`,
             feedbacks: data.counters.feedbacks,
             averageRating: data.counters.averageRating.toFixed(1),
-            counters: data.counters
+            counters: data.counters,
+            revenueByMonth: data.revenueByMonth || [],
+            categoryData: data.categoryData || []
         };
     },
 

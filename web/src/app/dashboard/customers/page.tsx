@@ -1,33 +1,56 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { AuthWebService } from '@/services/authService';
 import { User } from '@/types';
 import { Users, Mail, Phone, Calendar, Search, Filter, MoreVertical } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 export default function CustomersPage() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => {
-        async function loadUsers() {
-            try {
-                const data = await AuthWebService.getUsers();
-                setUsers(data);
-            } catch (error) {
-                console.error('Error loading users:', error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadUsers();
-    }, []);
+    const { data: users = [], isLoading: loading } = useQuery<User[]>({
+        queryKey: ['customers'],
+        queryFn: () => AuthWebService.getUsers(),
+    });
 
     const filteredUsers = users.filter(user =>
         user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Calculate new customers this month
+    const newCustomersThisMonth = users.filter(user => {
+        const userDate = new Date(user.createdAt);
+        const now = new Date();
+        return userDate.getMonth() === now.getMonth() && userDate.getFullYear() === now.getFullYear();
+    }).length;
+
+    const handleExportCSV = () => {
+        if (users.length === 0) return;
+
+        const headers = ['Nome', 'Email', 'Telefone', 'Cargo', 'Data de Registo'];
+        const csvContent = [
+            headers.join(','),
+            ...users.map(u => [
+                `"${u.name || ''}"`,
+                `"${u.email || ''}"`,
+                `"${u.phone || ''}"`,
+                `"${u.role || ''}"`,
+                `"${new Date(u.createdAt).toLocaleDateString('pt-BR')}"`
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `clientes_puculuxa_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div className="p-8 transition-colors duration-300">
@@ -51,7 +74,11 @@ export default function CustomersPage() {
                         <Filter size={18} />
                         Filtros
                     </button>
-                    <button className="px-6 py-2 bg-puculuxa-orange text-white rounded-xl shadow-puculuxa hover:opacity-90 transition-all font-bold">
+                    <button
+                        onClick={handleExportCSV}
+                        disabled={users.length === 0}
+                        className="px-6 py-2 bg-puculuxa-orange text-white rounded-xl shadow-puculuxa hover:opacity-90 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                         Exportar CSV
                     </button>
                 </div>
@@ -74,7 +101,7 @@ export default function CustomersPage() {
                         </div>
                         <span className="text-sm font-medium opacity-80">Novos este Mês</span>
                     </div>
-                    <p className="text-3xl font-bold">0</p>
+                    <p className="text-3xl font-bold">{newCustomersThisMonth}</p>
                 </div>
                 <div className="bg-bg-card p-6 rounded-3xl border border-border-main shadow-sm">
                     <div className="flex items-center gap-4 mb-2">

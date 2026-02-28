@@ -12,11 +12,11 @@ export const Button: React.FC<ButtonProps> = ({
     className = '',
     ...props
 }) => {
-    const baseStyles = 'btn-premium';
+    const baseStyles = 'relative inline-flex items-center justify-center font-semibold rounded-2xl transition-all duration-300 overflow-hidden active:scale-95';
     const variants = {
-        premium: '',
-        outline: 'bg-transparent border-2 border-puculuxa-orange text-puculuxa-orange hover:bg-puculuxa-orange/5',
-        ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 shadow-none',
+        premium: 'px-8 py-4 bg-gradient-to-br from-puculuxa-orange to-puculuxa-gold text-white shadow-puculuxa hover:shadow-glow hover:-translate-y-1',
+        outline: 'px-8 py-4 bg-transparent border-2 border-slate-200 dark:border-slate-700 text-text-primary hover:border-puculuxa-orange hover:text-puculuxa-orange hover:bg-slate-50 dark:hover:bg-slate-800',
+        ghost: 'px-6 py-3 bg-transparent text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-puculuxa-orange shadow-none',
     };
 
     return (

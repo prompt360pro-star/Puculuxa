@@ -11,12 +11,13 @@ const getHeaders = () => ({
 import { Product } from '@/types';
 
 export const ProductWebService = {
-    async getAll(): Promise<Product[]> {
+    async getAll(page: number = 1, limit: number = 20): Promise<Product[]> {
         try {
-            const response = await fetch(`${BASE_URL}/products`, {
+            const response = await fetch(`${BASE_URL}/products?page=${page}&limit=${limit}`, {
                 headers: getHeaders()
             });
-            return await response.json();
+            const result = await response.json();
+            return result.data || [];
         } catch (error) {
             console.error('Error fetching products:', error);
             return [];

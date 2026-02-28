@@ -10,114 +10,162 @@ export class PdfService {
     res: Response,
   ) {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
-
-    // Stream the PDF to the response
     doc.pipe(res);
 
-    // Header - Logo Placeholder or Brand Name
-    doc.fillColor('#E91E63').fontSize(24).text('Puculuxa', { align: 'center' });
+    const primaryColor = '#e11d48'; // Rose 600
+    const textDark = '#0f172a'; // Slate 900
+    const textMuted = '#64748b'; // Slate 500
+    const lineLight = '#e2e8f0'; // Slate 200
 
+    // Header Background
+    doc.rect(0, 0, 595, 120).fill('#f8fafc'); // Slate 50
+
+    // Header Text
     doc
-      .fillColor('#444444')
+      .fillColor(primaryColor)
+      .fontSize(28)
+      .text('PUCULUXA', 50, 45, { characterSpacing: 2 });
+    doc
+      .fillColor(textMuted)
       .fontSize(10)
-      .text('Cakes & Catering', { align: 'center' })
-      .moveDown(2);
+      .text('Cakes & Catering Exclusivo', 50, 75);
 
-    // Horizontal Line
+    // Document Meta (Right aligned)
     doc
-      .strokeColor('#EEEEEE')
-      .moveTo(50, 100)
-      .lineTo(545, 100)
-      .stroke()
-      .moveDown(2);
-
-    // Quotation Title
+      .fillColor(textDark)
+      .fontSize(14)
+      .text('ORÇAMENTO', 400, 45, { align: 'right' });
     doc
-      .fillColor('#333333')
-      .fontSize(18)
-      .text('Orçamento de Evento', { align: 'left' })
-      .moveDown();
-
-    // Details Table Heading
-    doc
-      .fontSize(12)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      .text(`Evento: ${quotation.eventType}`, 50, 160)
-      .text(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
-        `Data: ${quotation.eventDate ? new Date(quotation.eventDate).toLocaleDateString('pt-BR') : 'A definir'}`,
-        50,
-        180,
-      )
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      .text(`Nº de Convidados: ${quotation.guestCount}`, 50, 200)
-      .moveDown(2);
-
-    // Customer Info
-    doc
-      .text('Dados do Cliente:', 300, 160)
+      .fillColor(textMuted)
       .fontSize(10)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      .text(`Nome: ${quotation.customerName || 'N/A'}`, 300, 180)
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      .text(`Telefone: ${quotation.customerPhone || 'N/A'}`, 300, 200);
+      .text(`Ref: #${quotation.id.slice(0, 8).toUpperCase()}`, 400, 65, {
+        align: 'right',
+      });
+    doc.text(
+      `Data: ${new Date(quotation.createdAt).toLocaleDateString('pt-BR')}`,
+      400,
+      80,
+      { align: 'right' },
+    );
 
-    // Table Content
     doc.moveDown(4);
 
-    // Table Header
-    const tableTop = 260;
-    doc
-      .fillColor('#E91E63')
-      .fontSize(12)
-      .text('Item', 50, tableTop)
-      .text('Detalhes', 150, tableTop)
-      .text('Total', 480, tableTop, { align: 'right' });
+    // Two Column Layout for Customer / Event Info
+    const topY = 160;
 
+    // Left Box - Customer
+    doc.rect(50, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
     doc
-      .strokeColor('#DDDDDD')
-      .moveTo(50, tableTop + 15)
-      .lineTo(545, tableTop + 15)
+      .fillColor(primaryColor)
+      .fontSize(10)
+      .text('DADOS DO CLIENTE', 65, topY + 15);
+    doc
+      .fillColor(textDark)
+      .fontSize(12)
+      .text(quotation.customerName || 'Cliente Padrão', 65, topY + 35);
+    doc
+      .fillColor(textMuted)
+      .fontSize(10)
+      .text(`Tel: ${quotation.customerPhone || 'N/A'}`, 65, topY + 55);
+
+    // Right Box - Event
+    doc.rect(315, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
+    doc
+      .fillColor(primaryColor)
+      .fontSize(10)
+      .text('DETALHES DO EVENTO', 330, topY + 15);
+    doc
+      .fillColor(textDark)
+      .fontSize(12)
+      .text(quotation.eventType, 330, topY + 35);
+    doc
+      .fillColor(textMuted)
+      .fontSize(10)
+      .text(`Convidados: ${quotation.guestCount} pax`, 330, topY + 55);
+    doc.text(
+      `Data do Evento: ${quotation.eventDate ? new Date(quotation.eventDate).toLocaleDateString('pt-BR') : 'A definir'}`,
+      330,
+      topY + 70,
+    );
+
+    // Items Table Area
+    const tableTop = 290;
+
+    // Table Header
+    doc.rect(50, tableTop, 495, 30).fill(primaryColor);
+    doc.fillColor('#ffffff').fontSize(10);
+    doc.text('DESCRIÇÃO', 65, tableTop + 10);
+    doc.text('TIPO', 300, tableTop + 10);
+    doc.text('VALOR TOTAL', 430, tableTop + 10, { align: 'right', width: 100 });
+
+    // Table Content (Buffet Service)
+    const rowY = tableTop + 40;
+    doc.fillColor(textDark).fontSize(11);
+    doc.text('Serviço Completo de Catering', 65, rowY);
+    doc.fillColor(textMuted).fontSize(10);
+    doc.text(
+      `Menu premium para ${quotation.guestCount} convidados`,
+      65,
+      rowY + 15,
+    );
+
+    doc.fillColor(textDark).fontSize(11);
+    doc.text(quotation.eventType, 300, rowY);
+    doc.text(
+      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      430,
+      rowY,
+      { align: 'right', width: 100 },
+    );
+
+    // Add extra row for styling line
+    doc
+      .strokeColor(lineLight)
+      .moveTo(50, rowY + 45)
+      .lineTo(545, rowY + 45)
       .stroke();
 
-    // Table Row (Calculated Total)
-    doc
-      .fillColor('#444444')
-      .text('Serviço de Buffet', 50, tableTop + 30)
-      .text(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        `${quotation.eventType} para ${quotation.guestCount} pessoas`,
-        150,
-        tableTop + 30,
-      )
-      .text(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-        `Kz ${quotation.total.toLocaleString('pt-BR')}`,
-        480,
-        tableTop + 30,
-        { align: 'right' },
-      );
+    // Totals Section
+    const totalY = rowY + 60;
+    doc.fillColor(textDark).fontSize(12).text('Subtotal:', 350, totalY);
+    doc.text(
+      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      430,
+      totalY,
+      { align: 'right', width: 100 },
+    );
 
-    // Total
     doc
-      .moveDown(4)
-      .fillColor('#E91E63')
-      .fontSize(16)
-      .text(
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-        `Total do Orçamento: Kz ${quotation.total.toLocaleString('pt-BR')}`,
-        { align: 'right' },
-      );
+      .fillColor(primaryColor)
+      .fontSize(14)
+      .text('TOTAL:', 350, totalY + 25);
+    doc.text(
+      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      430,
+      totalY + 25,
+      { align: 'right', width: 100 },
+    );
 
     // Footer
-    const footerY = doc.page.height - 100;
+    const footerY = doc.page.height - 80;
+    doc.rect(0, footerY - 20, 595, 100).fill('#f8fafc');
     doc
-      .fontSize(10)
-      .fillColor('#888888')
-      .text('Obrigado por escolher a Puculuxa!', 50, footerY, {
+      .fillColor(textMuted)
+      .fontSize(9)
+      .text('Obrigado por escolher a Puculuxa.', 50, footerY, {
         align: 'center',
-      })
-      .text('Este orçamento é válido por 15 dias.', { align: 'center' });
+      });
+    doc.text(
+      'Este orçamento tem validade de 15 dias a partir da data de emissão.',
+      50,
+      footerY + 15,
+      { align: 'center' },
+    );
+    doc
+      .fillColor(primaryColor)
+      .text('www.puculuxa.com | contacto@puculuxa.com', 50, footerY + 30, {
+        align: 'center',
+      });
 
     doc.end();
   }

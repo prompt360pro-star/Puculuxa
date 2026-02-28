@@ -1,10 +1,12 @@
 export interface Order {
     id: string;
-    customerName: string;
-    eventType: string;
-    status: 'PENDING' | 'APPROVED' | 'PRODUCING' | 'READY';
+    customerName?: string;
+    eventType?: string;
+    status: 'PENDING' | 'APPROVED' | 'PRODUCING' | 'READY' | 'DELIVERED' | 'CANCELLED';
     total: number;
     createdAt: string;
+    user?: { name: string; email?: string };
+    items?: { id: string; name: string; price: number; quantity: number }[];
 }
 
 export interface Product {

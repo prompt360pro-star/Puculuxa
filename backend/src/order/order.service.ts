@@ -1,23 +1,52 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsGateway } from '../events/events.gateway';
 
 export enum OrderStatus {
   PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
+  APPROVED = 'APPROVED',
+  PRODUCING = 'PRODUCING',
+  READY = 'READY',
+  DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED',
 }
 
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private events: EventsGateway,
+  ) { }
 
-  findAll() {
-    return this.prisma.order.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: true,
-        items: true,
+  async findAll(page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.prisma.order.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { user: true, items: true },
+      }),
+      this.prisma.order.count(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        lastPage: Math.ceil(total / limit),
       },
+    };
+  }
+
+  findMyOrders(userId: string) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
     });
   }
 
@@ -31,7 +60,7 @@ export class OrderService {
     });
   }
 
-  create(data: {
+  async create(data: {
     userId: string;
     total: number;
     items: {
@@ -41,7 +70,7 @@ export class OrderService {
       quantity: number;
     }[];
   }) {
-    return this.prisma.order.create({
+    const newOrder = await this.prisma.order.create({
       data: {
         userId: data.userId,
         items: {
@@ -55,13 +84,20 @@ export class OrderService {
         total: data.total,
         status: OrderStatus.PENDING,
       },
+      include: { user: true, items: true },
     });
+
+    this.events.notifyAdmins('new_order', newOrder);
+    return newOrder;
   }
 
-  updateStatus(id: string, status: OrderStatus) {
-    return this.prisma.order.update({
+  async updateStatus(id: string, status: OrderStatus) {
+    const updatedOrder = await this.prisma.order.update({
       where: { id },
       data: { status },
+      include: { user: true },
     });
+    this.events.notifyAdmins('order_status_update', updatedOrder);
+    return updatedOrder;
   }
 }

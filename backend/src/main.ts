@@ -8,7 +8,11 @@ async function bootstrap() {
 
   // Enable CORS for frontend access
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:4000'],
+    origin: process.env.CORS_ORIGINS?.split(',') || [
+      'http://localhost:4000',
+      'http://localhost:3000',
+      'http://localhost:6005',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
