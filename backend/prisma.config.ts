@@ -5,6 +5,6 @@ export default defineConfig({
         url: 'file:./prisma/dev.db',
     },
     migrations: {
-        seed: 'node prisma/seed.js',
-    },
+        seed: 'ts-node --compiler-options {"module":"CommonJS"} prisma/seed.ts',
+    }
 });

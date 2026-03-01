@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TextInput, ScrollView,
-    TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform
+    TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image, ToastAndroid
 } from 'react-native';
-import { ArrowLeft, Save, User, Phone, MapPin } from 'lucide-react-native';
+import { ArrowLeft, Save, User, Phone, MapPin, Mail, Camera } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Theme } from '../theme';
 import { useAuthStore } from '../store/authStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../services/api';
+import * as ImagePicker from 'expo-image-picker';
 
 export const EditProfileScreen = () => {
     const navigation = useNavigation();
@@ -17,13 +18,29 @@ export const EditProfileScreen = () => {
     const [name, setName] = useState(user?.name || '');
     const [phone, setPhone] = useState(user?.phone || '');
     const [address, setAddress] = useState(user?.address || '');
+    const [avatarUri, setAvatarUri] = useState(user?.avatarUrl || null);
     const [isSaving, setIsSaving] = useState(false);
 
-    const handleSave = async () => {
-        if (!name.trim()) {
-            Alert.alert('Erro', 'O nome é obrigatório.');
-            return;
+    const handlePickAvatar = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            setAvatarUri(result.assets[0].uri);
         }
+    };
+
+    const handleSave = async () => {
+        if (!name.trim()) return Alert.alert('Erro', 'O nome é obrigatório.');
+        const phoneClean = phone.replace(/\D/g, '');
+        if (phoneClean && phoneClean.length < 9) {
+            return Alert.alert('Atenção', 'Número de telefone inválido (mínimo 9 dígitos).');
+        }
+
         setIsSaving(true);
         try {
             const updatedUser = await ApiService.updateProfile({ name, phone, address });
@@ -33,9 +50,15 @@ export const EditProfileScreen = () => {
             const merged = { ...parsed, ...updatedUser };
             await AsyncStorage.setItem('puculuxa_user', JSON.stringify(merged));
             if (typeof setUser === 'function') setUser(merged);
-            Alert.alert('Sucesso', 'Perfil atualizado com sucesso!', [
-                { text: 'OK', onPress: () => navigation.goBack() }
-            ]);
+
+            if (Platform.OS === 'android') {
+                ToastAndroid.show('Perfil atualizado com sucesso!', ToastAndroid.SHORT);
+                navigation.goBack();
+            } else {
+                Alert.alert('Sucesso', 'Perfil atualizado com sucesso!', [
+                    { text: 'OK', onPress: () => navigation.goBack() }
+                ]);
+            }
         } catch (error) {
             Alert.alert('Erro', 'Não foi possível guardar as alterações. Tente novamente.');
             console.error('EditProfile error:', error);
@@ -44,18 +67,19 @@ export const EditProfileScreen = () => {
         }
     };
 
-    const Field = ({ icon: Icon, label, value, onChangeText, placeholder, keyboardType = 'default' }) => (
+    const Field = ({ icon: Icon, label, value, onChangeText, placeholder, keyboardType = 'default', editable = true }) => (
         <View style={styles.fieldContainer}>
             <Text style={styles.fieldLabel}>{label}</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[styles.inputWrapper, !editable && { backgroundColor: '#f0f0f0', borderColor: '#f0f0f0' }]}>
                 <Icon size={18} color={Theme.colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
-                    style={styles.input}
+                    style={[styles.input, !editable && { color: Theme.colors.textSecondary }]}
                     value={value}
                     onChangeText={onChangeText}
                     placeholder={placeholder}
                     placeholderTextColor="#aaa"
                     keyboardType={keyboardType}
+                    editable={editable}
                 />
             </View>
         </View>
@@ -78,16 +102,31 @@ export const EditProfileScreen = () => {
 
                 {/* Avatar Initials */}
                 <View style={styles.avatarSection}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {name ? name.charAt(0).toUpperCase() : '?'}
-                        </Text>
-                    </View>
-                    <Text style={styles.avatarHint}>Toque para alterar a foto (em breve)</Text>
+                    <TouchableOpacity style={styles.avatar} onPress={handlePickAvatar} activeOpacity={0.8}>
+                        {avatarUri ? (
+                            <Image source={{ uri: avatarUri }} style={{ width: 84, height: 84, borderRadius: 42 }} />
+                        ) : (
+                            <Text style={styles.avatarText}>
+                                {name ? name.charAt(0).toUpperCase() : '?'}
+                            </Text>
+                        )}
+                        <View style={styles.cameraBadge}>
+                            <Camera size={14} color="white" />
+                        </View>
+                    </TouchableOpacity>
+                    <Text style={styles.avatarHint}>Toque para alterar a foto</Text>
                 </View>
 
                 {/* Form */}
                 <View style={styles.form}>
+                    <Field
+                        icon={Mail}
+                        label="Email (Não Editável)"
+                        value={user?.email || ''}
+                        onChangeText={() => { }}
+                        placeholder="Seu email"
+                        editable={false}
+                    />
                     <Field
                         icon={User}
                         label="Nome completo"
@@ -152,7 +191,15 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     avatarText: { fontSize: 36, fontWeight: 'bold', color: Theme.colors.primary },
-    avatarHint: { fontSize: 12, color: Theme.colors.textSecondary, opacity: 0.6 },
+    avatarHint: { fontSize: 13, color: Theme.colors.textSecondary, marginTop: 4, fontWeight: '500' },
+    cameraBadge: {
+        position: 'absolute',
+        bottom: -2, right: -2,
+        backgroundColor: Theme.colors.primary,
+        width: 32, height: 32, borderRadius: 16,
+        justifyContent: 'center', alignItems: 'center',
+        borderWidth: 3, borderColor: Theme.colors.background
+    },
     form: { backgroundColor: 'white', borderRadius: 24, padding: 20, marginBottom: 24, ...Theme.shadows?.light },
     fieldContainer: { marginBottom: 20 },
     fieldLabel: { fontSize: 12, fontWeight: '700', color: Theme.colors.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },

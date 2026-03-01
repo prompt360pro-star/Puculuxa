@@ -4,24 +4,24 @@
  */
 
 export const COLORS = {
-    // Primárias (Logo)
-    primary: '#FF8C42',      // Laranja Vibrante
-    secondary: '#8BAE3E',    // Verde Lima
-    accent: '#6B8E23',       // Verde Oliva
+    // Primárias (Logo adaptado para Dark Premium)
+    primary: '#D4AF37',      // Dourado Premium
+    secondary: '#1C1C1E',    // Cinza Muito Escuro
+    accent: '#B8860B',       // Dark Goldenrod
 
     // Gradientes
-    gradientStart: '#FF8C42',
-    gradientMid: '#FFD700',  // Amarelo-Ouro
-    gradientEnd: '#8BAE3E',
+    gradientStart: '#D4AF37',
+    gradientMid: '#B8860B',
+    gradientEnd: '#8B6508',
 
     // Complementares
-    background: '#FFFEF7',   // Branco Cremoso (Baunilha)
-    surface: '#FFF8E1',      // Bege Suave
-    detail: '#FFD8B8',       // Laranja Pastel
-    positive: '#E8F5E9',     // Verde Menta
-    textSecondary: '#8D8174', // Cinza Quente
-    textPrimary: '#6B8E23',   // Verde Oliva (para subtítulos)
-    white: '#FFFFFF',
+    background: '#121212',   // Fundo Preencido
+    surface: '#1E1E1E',      // Fundo Cartões/Containers
+    detail: '#2C2C2E',       // Detalhes / Borders
+    positive: '#223322',     // Verde Dark para Sucesso
+    textSecondary: '#A0A0A5', // Cinza Claro (Readable on Dark)
+    textPrimary: '#FFFFFF',   // Branco Puro
+    white: '#1E1E1E',         // Revestindo White com Surface para adaptação rápida
     black: '#000000',
 };
 

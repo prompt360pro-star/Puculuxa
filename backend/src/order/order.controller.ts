@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
@@ -12,9 +13,14 @@ import { OrderService, OrderStatus } from './order.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 
+class CreateOrderDto {
+  total!: number;
+  items!: { productId: string; name: string; price: number; quantity: number }[];
+}
+
 @Controller('orders')
 export class OrderController {
-  constructor(private readonly orderService: OrderService) {}
+  constructor(private readonly orderService: OrderService) { }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -29,6 +35,16 @@ export class OrderController {
   @Get('my')
   findMyOrders(@Req() req: { user: { id: string } }) {
     return this.orderService.findMyOrders(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  create(@Req() req: { user: { id: string } }, @Body() createOrderDto: CreateOrderDto) {
+    return this.orderService.create({
+      userId: req.user.id,
+      total: createOrderDto.total,
+      items: createOrderDto.items,
+    });
   }
 
   @UseGuards(JwtAuthGuard)

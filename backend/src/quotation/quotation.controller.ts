@@ -27,7 +27,7 @@ export class QuotationController {
     private readonly quotationService: QuotationService,
     private readonly pdfService: PdfService,
     private readonly imageService: ImageService,
-  ) {}
+  ) { }
 
   @UseGuards(JwtAuthGuard)
   @Post('upload')
@@ -48,6 +48,11 @@ export class QuotationController {
   @Get()
   findAll() {
     return this.quotationService.findAll();
+  }
+
+  @Get('blocked-dates')
+  getBlockedDates() {
+    return this.quotationService.getBlockedDates();
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

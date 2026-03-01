@@ -9,7 +9,8 @@ import {
     Platform,
     ScrollView,
     Alert,
-    ActivityIndicator
+    ActivityIndicator,
+    Image
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LogIn, Mail, Lock, ArrowRight } from 'lucide-react-native';
@@ -43,7 +44,7 @@ export default function LoginScreen({ navigation }) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
                     <View style={styles.logoCircle}>
-                        <LogIn size={40} color={Theme.colors.primary} />
+                        <Image source={require('../../assets/logo.jpeg')} style={styles.logoImage} />
                     </View>
                     <Text style={styles.title}>Bem-vindo de volta!</Text>
                     <Text style={styles.subtitle}>Acesse sua conta para gerenciar seus pedidos e orçamentos.</Text>

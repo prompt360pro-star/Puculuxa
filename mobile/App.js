@@ -26,6 +26,12 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { FavoritesScreen } from './src/screens/FavoritesScreen';
 import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
+import { CartScreen } from './src/screens/CartScreen';
+import { ChatScreen } from './src/screens/ChatScreen';
+import { PaymentScreen } from './src/screens/PaymentScreen';
+import { CakeDesignerScreen } from './src/screens/CakeDesignerScreen';
+import { OrderTrackingScreen } from './src/screens/OrderTrackingScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { useAuthStore } from './src/store/authStore';
 import { QueryProvider } from './src/providers/QueryProvider';
 import * as Device from 'expo-device';
@@ -145,7 +151,13 @@ export default function App() {
                             <Stack.Screen name="Profile" component={ProfileScreen} />
                             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
                             <Stack.Screen name="Favorites" component={FavoritesScreen} />
+                            <Stack.Screen name="Cart" component={CartScreen} />
+                            <Stack.Screen name="Payment" component={PaymentScreen} />
+                            <Stack.Screen name="Chat" component={ChatScreen} />
+                            <Stack.Screen name="CakeDesigner" component={CakeDesignerScreen} />
                             <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+                            <Stack.Screen name="OrderTracking" component={OrderTrackingScreen} />
+                            <Stack.Screen name="Notifications" component={NotificationsScreen} />
                         </>
                     )}
                 </Stack.Navigator>

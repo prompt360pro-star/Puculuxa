@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Theme } from '../theme';
 
@@ -39,10 +39,7 @@ export const SplashScreen = ({ navigation }) => {
             <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
                 {/* Usaremos um placeholder visual até termos o arquivo do logo */}
                 <View style={styles.placeholderLogo}>
-                    <View style={styles.logoCircle}>
-                        {/* Simulação dos talheres entrelaçados */}
-                        <View style={styles.forkSpoon} />
-                    </View>
+                    <Image source={require('../../assets/logo.jpeg')} style={styles.logoImage} />
                 </View>
             </Animated.View>
         </LinearGradient>
@@ -65,21 +62,16 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.2)',
         borderRadius: Theme.radius.full,
         padding: Theme.spacing.lg,
-        borderWidth: 2,
         borderColor: 'white',
         borderStyle: 'dotted',
-    },
-    logoCircle: {
-        flex: 1,
-        backgroundColor: Theme.colors.background,
-        borderRadius: Theme.radius.full,
         justifyContent: 'center',
         alignItems: 'center',
+        overflow: 'hidden',
     },
-    forkSpoon: {
-        width: 40,
-        height: 40,
-        backgroundColor: Theme.colors.accent,
-        borderRadius: 20,
+    logoImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+        borderRadius: Theme.radius.full,
     }
 });

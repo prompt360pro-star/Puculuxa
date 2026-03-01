@@ -25,9 +25,7 @@ export const Sidebar = () => {
         <aside className="w-72 bg-bg-card/80 backdrop-blur-xl border border-white/20 dark:border-white/10 m-4 rounded-[2rem] flex flex-col h-[calc(100vh-2rem)] sticky top-4 shadow-elite transition-all duration-500 overflow-hidden z-20">
             {/* Branding Section */}
             <div className="p-10 flex flex-col items-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-puculuxa-orange to-puculuxa-gold rounded-[2rem] flex items-center justify-center shadow-puculuxa mb-5 rotate-3 hover:rotate-0 transition-transform duration-500">
-                    <ChefHat size={40} className="text-white" />
-                </div>
+                <img src="/logo.jpeg" alt="Puculuxa Logo" className="w-20 h-20 rounded-[2rem] object-cover shadow-puculuxa mb-5 rotate-3 hover:rotate-0 transition-transform duration-500" />
                 <h2 className="text-2xl font-black text-text-primary tracking-tight transition-colors">Puculuxa</h2>
                 <p className="text-[10px] text-puculuxa-orange font-black tracking-[0.3em] uppercase mt-1">Cakes & Catering</p>
             </div>

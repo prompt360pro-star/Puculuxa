@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions, Image } from 'react-native';
 import { ChevronRight, ChevronLeft, CheckCircle, Calculator, Sparkles, Wand2, User, Image as ImageIcon } from 'lucide-react-native';
 import { Theme } from '../theme';
-import { calculateQuotation, EVENT_TYPES } from '@puculuxa/shared';
 import { ApiService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width } = Dimensions.get('window');
 
@@ -13,8 +13,19 @@ export const QuotationWizard = ({ navigation }) => {
     const { user } = useAuthStore();
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
+    const EVENT_TYPES_LOCAL = {
+        WEDDING: 'casamento',
+        BIRTHDAY: 'aniversário',
+        CORPORATE: 'corporativo',
+        BAPTISM: 'batizado',
+        GRADUATION: 'formatura',
+        BABY_SHOWER: 'chá de bebé',
+        OTHER: 'outro'
+    };
+
     const [formData, setFormData] = useState({
-        eventType: EVENT_TYPES.BIRTHDAY,
+        eventType: EVENT_TYPES_LOCAL.BIRTHDAY,
+        customEventType: '',
         guestCount: '',
         date: '',
         complements: [],
@@ -22,6 +33,8 @@ export const QuotationWizard = ({ navigation }) => {
         customerPhone: user?.phone || '',
     });
     const [imageUri, setImageUri] = useState(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [blockedDates, setBlockedDates] = useState([]);
 
 
     // Animation values
@@ -29,14 +42,35 @@ export const QuotationWizard = ({ navigation }) => {
     const slideAnim = useRef(new Animated.Value(0)).current;
 
     const COMPLEMENTS_LIST = [
-        { id: 'CUPCAKES', label: 'Cupcakes Decorados', price: 15.00, icon: '🧁' },
-        { id: 'SWEETS', label: 'Mesa de Doces Finos', price: 25.00, icon: '🍬' },
-        { id: 'SALTY', label: 'Kit Salgados Premium', price: 45.00, icon: '🥟' },
-        { id: 'DRINKS', label: 'Bebidas Tropicais', price: 20.00, icon: '🍹' },
+        { id: 'CUPCAKES', label: 'Cupcakes Decorados', price: 12000, icon: '🧁' },
+        { id: 'SWEETS', label: 'Mesa de Doces Finos', price: 25000, icon: '🍬' },
+        { id: 'SALTY', label: 'Kit Salgados Premium', price: 45000, icon: '🥟' },
+        { id: 'DRINKS', label: 'Bebidas Tropicais', price: 20000, icon: '🍹' },
     ];
+
+    const EVENT_BASE_PRICES = {
+        [EVENT_TYPES_LOCAL.WEDDING]: 25000,
+        [EVENT_TYPES_LOCAL.BIRTHDAY]: 10000,
+        [EVENT_TYPES_LOCAL.CORPORATE]: 30000,
+        [EVENT_TYPES_LOCAL.BAPTISM]: 15000,
+        [EVENT_TYPES_LOCAL.GRADUATION]: 20000,
+        [EVENT_TYPES_LOCAL.BABY_SHOWER]: 12000,
+        [EVENT_TYPES_LOCAL.OTHER]: 10000,
+    };
+
+    const calculateRealTotal = () => {
+        const base = EVENT_BASE_PRICES[formData.eventType] || 15000;
+        const guestsAmount = (parseInt(formData.guestCount) || 0) * 800; // Kz 800 por convidado
+        const complementsAmount = formData.complements.reduce((sum, currentId) => {
+            const comp = COMPLEMENTS_LIST.find(c => c.id === currentId);
+            return sum + (comp ? comp.price : 0);
+        }, 0);
+        return base + guestsAmount + complementsAmount;
+    };
 
     useEffect(() => {
         animateTransition();
+        ApiService.getBlockedDates().then(dates => setBlockedDates(dates)).catch(() => { });
     }, [step]);
 
     const animateTransition = () => {
@@ -68,8 +102,29 @@ export const QuotationWizard = ({ navigation }) => {
     };
 
     const handleNext = () => {
+        if (step === 1) {
+            if (!formData.eventType) return Alert.alert('Atenção', 'Selecione um tipo de evento para continuar.');
+            if (formData.eventType === 'outro' && !formData.customEventType.trim()) {
+                return Alert.alert('Atenção', 'Especifique o tipo de evento.');
+            }
+        }
+        if (step === 2) {
+            const guests = parseInt(formData.guestCount);
+            if (!guests || guests < 10) return Alert.alert('Atenção', 'O número mínimo de convidados é 10.');
+            if (!formData.date) return Alert.alert('Atenção', 'Selecione a data do evento.');
+        }
+
         if (step < 4) setStep(step + 1);
         else handleSubmit();
+    };
+
+    const isNextDisabled = () => {
+        if (step === 1) return !formData.eventType || (formData.eventType === 'outro' && !formData.customEventType.trim());
+        if (step === 2) {
+            const guests = parseInt(formData.guestCount) || 0;
+            return guests < 10 || !formData.date;
+        }
+        return false;
     };
 
     const handleBack = () => {
@@ -106,11 +161,7 @@ export const QuotationWizard = ({ navigation }) => {
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const calculation = calculateQuotation({
-                eventType: formData.eventType,
-                guestCount: parseInt(formData.guestCount) || 0,
-                complements: formData.complements
-            });
+            const totalEstimated = calculateRealTotal();
 
             let referenceImage = null;
             if (imageUri) {
@@ -121,7 +172,7 @@ export const QuotationWizard = ({ navigation }) => {
             const response = await ApiService.postQuotation({
                 ...formData,
                 referenceImage,
-                ...calculation
+                total: totalEstimated
             });
 
             if (response.id) {
@@ -190,7 +241,7 @@ export const QuotationWizard = ({ navigation }) => {
                 {step === 1 && (
                     <View>
                         <Text style={styles.stepTitle}>Qual o seu evento?</Text>
-                        {Object.entries(EVENT_TYPES).map(([key, value]) => (
+                        {Object.entries(EVENT_TYPES_LOCAL).map(([key, value]) => (
                             <TouchableOpacity
                                 key={key}
                                 style={[styles.optionCard, formData.eventType === value && styles.optionCardActive]}
@@ -203,6 +254,15 @@ export const QuotationWizard = ({ navigation }) => {
                                 {formData.eventType === value && <CheckCircle size={20} color={Theme.colors.primary} />}
                             </TouchableOpacity>
                         ))}
+                        {formData.eventType === 'outro' && (
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Especifique o tipo de evento"
+                                placeholderTextColor={Theme.colors.textSecondary + '80'}
+                                value={formData.customEventType}
+                                onChangeText={(text) => setFormData({ ...formData, customEventType: text })}
+                            />
+                        )}
                     </View>
                 )}
 
@@ -218,13 +278,43 @@ export const QuotationWizard = ({ navigation }) => {
                             onChangeText={(text) => setFormData({ ...formData, guestCount: text })}
                         />
                         <Text style={styles.stepTitle}>Data do Evento</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="DD/MM/AAAA"
-                            placeholderTextColor={Theme.colors.textSecondary + '80'}
-                            value={formData.date}
-                            onChangeText={(text) => setFormData({ ...formData, date: text })}
-                        />
+                        <TouchableOpacity
+                            style={[styles.input, { justifyContent: 'center' }]}
+                            activeOpacity={0.7}
+                            onPress={() => setShowDatePicker(true)}
+                        >
+                            <Text style={{ color: formData.date ? Theme.colors.textPrimary : Theme.colors.textSecondary }}>
+                                {formData.date || "DD/MM/AAAA"}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={formData.date ? new Date(formData.date.split('/').reverse().join('-')) : new Date(Date.now() + 86400000)}
+                                mode="date"
+                                display="default"
+                                minimumDate={new Date(Date.now() + 86400000)} // amanha
+                                onChange={(event, selectedDate) => {
+                                    setShowDatePicker(false);
+                                    if (selectedDate) {
+                                        const day = String(selectedDate.getDate()).padStart(2, '0');
+                                        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                                        const year = selectedDate.getFullYear();
+
+                                        const isoDate = `${year}-${month}-${day}`;
+                                        if (blockedDates.includes(isoDate)) {
+                                            Alert.alert(
+                                                'Data Indisponível',
+                                                'Infelizmente esta data já atingiu o limite de reservas. Por favor, escolha outra.'
+                                            );
+                                            return;
+                                        }
+
+                                        setFormData({ ...formData, date: `${day}/${month}/${year}` });
+                                    }
+                                }}
+                            />
+                        )}
 
                         <Text style={styles.stepTitle}>Imagem de Referência (Opcional)</Text>
                         <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage} activeOpacity={0.8}>
@@ -250,9 +340,14 @@ export const QuotationWizard = ({ navigation }) => {
                                 <View style={styles.optionRow}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                         <Text style={{ fontSize: 24, marginRight: 12 }}>{item.icon}</Text>
-                                        <Text style={[styles.optionText, formData.complements.includes(item.id) && styles.optionTextActive]}>
-                                            {item.label}
-                                        </Text>
+                                        <View>
+                                            <Text style={[styles.optionText, formData.complements.includes(item.id) && styles.optionTextActive]}>
+                                                {item.label}
+                                            </Text>
+                                            <Text style={{ fontSize: 13, color: Theme.colors.textSecondary, marginTop: 4 }}>
+                                                + Kz {item.price.toLocaleString('pt-BR')}
+                                            </Text>
+                                        </View>
                                     </View>
                                     <View style={[styles.checkbox, formData.complements.includes(item.id) && styles.checkboxActive]} />
                                 </View>
@@ -271,36 +366,46 @@ export const QuotationWizard = ({ navigation }) => {
                         <View style={styles.summaryCard}>
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Evento</Text>
-                                <Text style={styles.summaryValue}>{formData.eventType}</Text>
+                                <Text style={styles.summaryValue}>{formData.eventType === 'outro' ? formData.customEventType : formData.eventType}</Text>
                             </View>
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Convidados</Text>
                                 <Text style={styles.summaryValue}>{formData.guestCount}</Text>
                             </View>
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Data</Text>
+                                <Text style={styles.summaryValue}>{formData.date}</Text>
+                            </View>
                             {imageUri && (
                                 <View style={styles.summaryRow}>
                                     <Text style={styles.summaryLabel}>Imagem de Referência</Text>
-                                    <Text style={styles.summaryValue}>Anexada ✅</Text>
+                                    <Image source={{ uri: imageUri }} style={{ width: 40, height: 40, borderRadius: 8 }} />
                                 </View>
+                            )}
+
+                            {formData.complements.length > 0 && (
+                                <>
+                                    <View style={[styles.divider, { marginVertical: 12 }]} />
+                                    <Text style={[styles.summaryLabel, { marginBottom: 8 }]}>Complementos Adicionados:</Text>
+                                    {formData.complements.map(cId => {
+                                        const comp = COMPLEMENTS_LIST.find(c => c.id === cId);
+                                        if (!comp) return null;
+                                        return (
+                                            <View key={cId} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary }}>{comp.icon} {comp.label}</Text>
+                                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary }}>+ Kz {comp.price.toLocaleString('pt-BR')}</Text>
+                                            </View>
+                                        );
+                                    })}
+                                </>
                             )}
 
                             <View style={styles.divider} />
 
-                            {(() => {
-                                const calc = calculateQuotation({
-                                    eventType: formData.eventType,
-                                    guestCount: parseInt(formData.guestCount) || 0,
-                                    complements: formData.complements
-                                });
-                                return (
-                                    <View>
-                                        <View style={styles.totalRow}>
-                                            <Text style={styles.totalLabel}>Total Estimado</Text>
-                                            <Text style={styles.totalValue}>Kz {calc.total.toLocaleString()}</Text>
-                                        </View>
-                                    </View>
-                                );
-                            })()}
+                            <View style={styles.totalRow}>
+                                <Text style={styles.totalLabel}>Total Estimado</Text>
+                                <Text style={styles.totalValue}>Kz {calculateRealTotal().toLocaleString('pt-BR')}</Text>
+                            </View>
                         </View>
                         <Text style={styles.disclaimer}>
                             Este valor é uma estimativa inteligente baseada em eventos similares.
@@ -324,7 +429,7 @@ export const QuotationWizard = ({ navigation }) => {
                     <ChevronLeft size={24} color={Theme.colors.textSecondary} />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={handleNext} style={styles.nextButton}>
+                <TouchableOpacity onPress={handleNext} style={[styles.nextButton, isNextDisabled() && { opacity: 0.5 }]} disabled={isNextDisabled()}>
                     <Text style={styles.nextText}>{step === 4 ? 'Finalizar Pedido' : 'Continuar'}</Text>
                     {step < 4 ? <ChevronRight size={20} color="white" /> : <CheckCircle size={20} color="white" />}
                 </TouchableOpacity>

@@ -7,26 +7,31 @@ import {
     TextInput,
     TouchableOpacity,
     Image,
-    Dimensions
+    Dimensions,
+    FlatList,
+    StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { Search, ShoppingCart, User, UtensilsCrossed, Heart, Star } from 'lucide-react-native';
+import { Search, ShoppingCart, User, UtensilsCrossed, Heart, Star, ChevronRight, ChevronDown } from 'lucide-react-native';
 import { Theme } from '../theme';
 import { Skeleton } from '../components/ui/Skeleton';
+import { BottomNav } from '../components/ui/BottomNav';
 import { useQuery } from '@tanstack/react-query';
 import { ApiService } from '../services/api';
 import { useFavoritesStore } from '../store/favoritesStore';
+import { useCartStore } from '../store/cartStore';
 
 
 const { width } = Dimensions.get('window');
 
-const EMOJI_MAP = { 'Bolos': 'ðŸŽ‚', 'Salgados': 'ðŸ¥', 'Sobremesas': 'ðŸ®', 'Bebidas': 'ðŸ¥¤', 'Outros': 'ðŸ‘¨â€ðŸ³', 'Todos': 'ðŸŒŸ' };
+const EMOJI_MAP = { 'Bolos': '🎂', 'Salgados': '🥟', 'Sobremesas': '🍮', 'Bebidas': '🍹', 'Catering': '👨‍🍳', 'Decoração': '🎈', 'Doces': '🍬', 'Todos': '🌟' };
+const CATEGORY_LIST = ['Todos', 'Bolos', 'Doces', 'Salgados', 'Bebidas', 'Catering', 'Decoração', 'Sobremesas'];
 
 const CategoryItem = ({ name, active, onPress }) => (
     <TouchableOpacity style={[styles.categoryCard, active && styles.categoryCardActive]} onPress={onPress}>
         <View style={[styles.categoryIconContainer, active && styles.categoryIconActive]}>
-            <Text style={{ fontSize: 24 }}>{EMOJI_MAP[name] || 'ðŸ°'}</Text>
+            <Text style={{ fontSize: 24 }}>{EMOJI_MAP[name] || '🍰'}</Text>
         </View>
         <Text style={[styles.categoryText, active && styles.categoryTextActive]}>{name}</Text>
     </TouchableOpacity>
@@ -35,6 +40,7 @@ const CategoryItem = ({ name, active, onPress }) => (
 const ProductCard = ({ product }) => {
     const navigation = useNavigation();
     const { toggle, isFavorite } = useFavoritesStore();
+    const [imageError, setImageError] = React.useState(false);
     const faved = isFavorite(product.id);
     return (
         <TouchableOpacity
@@ -42,10 +48,10 @@ const ProductCard = ({ product }) => {
             activeOpacity={0.9}
             onPress={() => navigation.navigate('ProductDetail', { product })}
         >
-            {product.image
-                ? <Image source={{ uri: product.image }} style={styles.productImage} />
+            {product.image && !imageError
+                ? <Image source={{ uri: product.image }} style={styles.productImage} onError={() => setImageError(true)} />
                 : <View style={[styles.productImage, { backgroundColor: '#fef3e2', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ fontSize: 36 }}>ðŸŽ‚</Text>
+                    <Text style={{ fontSize: 36 }}>🎂</Text>
                 </View>
             }
             <TouchableOpacity style={[styles.favBtn, faved && styles.favBtnActive]} onPress={() => toggle(product)}>
@@ -66,26 +72,46 @@ const ProductCard = ({ product }) => {
     );
 };
 
-
 export const HomeScreen = () => {
     const navigation = useNavigation();
     const [searchTerm, setSearchTerm] = React.useState('');
     const [selectedCategory, setSelectedCategory] = React.useState('Todos');
+    const [debouncedSearch, setDebouncedSearch] = React.useState('');
+    const [sortOrder, setSortOrder] = React.useState('relevance');
+    const cartItemsCount = useCartStore((s) => s.items?.length || 0);
+
+    const toggleSort = () => {
+        if (sortOrder === 'relevance') setSortOrder('priceAsc');
+        else if (sortOrder === 'priceAsc') setSortOrder('priceDesc');
+        else setSortOrder('relevance');
+    };
+
+    const getSortLabel = () => {
+        if (sortOrder === 'priceAsc') return 'Menor Preço';
+        if (sortOrder === 'priceDesc') return 'Maior Preço';
+        return 'Relevância';
+    };
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
     const { data: apiProducts = [], isLoading: loading } = useQuery({
         queryKey: ['products'],
         queryFn: ApiService.getProducts,
     });
 
-    const categories = React.useMemo(() => {
-        const cats = [...new Set(apiProducts.map(p => p.category).filter(Boolean))];
-        return ['Todos', ...cats];
-    }, [apiProducts]);
+    const categories = CATEGORY_LIST;
 
     const filteredProducts = apiProducts.filter(p => {
-        const matchSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchSearch = p.name?.toLowerCase().includes(debouncedSearch.toLowerCase());
         const matchCat = selectedCategory === 'Todos' || p.category === selectedCategory;
         return matchSearch && matchCat;
+    }).sort((a, b) => {
+        if (sortOrder === 'priceAsc') return a.price - b.price;
+        if (sortOrder === 'priceDesc') return b.price - a.price;
+        return 0;
     });
 
 
@@ -99,70 +125,18 @@ export const HomeScreen = () => {
 
     return (
         <View style={styles.container}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Header Gradient */}
-                <LinearGradient
-                    colors={[Theme.colors.gradientStart, Theme.colors.gradientMid, Theme.colors.gradientEnd]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.header}
-                >
-                    <View style={styles.headerTop}>
-                        <View style={styles.logoRow}>
-                            <Text style={styles.brandTitle}>Puculuxa</Text>
-                            <Text style={styles.brandSubtitle}>Cakes & Catering</Text>
-                        </View>
-                        <View style={styles.headerActions}>
-                            <TouchableOpacity style={styles.headerIcon}>
-                                <ShoppingCart size={24} color="white" />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.headerIcon} onPress={handleOpenProfile}>
-                                <User size={24} color="white" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    {/* Search Bar with Scalloped feel */}
-                    <View style={styles.searchContainer}>
-                        <Search size={20} color={Theme.colors.textSecondary} style={styles.searchIcon} />
-                        <TextInput
-                            placeholder="O que vocÃª estÃ¡ procurando?"
-                            placeholderTextColor={Theme.colors.textSecondary}
-                            style={styles.searchInput}
-                            value={searchTerm}
-                            onChangeText={setSearchTerm}
-                        />
-                    </View>
-                </LinearGradient>
-
-                <View style={styles.content}>
-                    {/* Featured Section */}
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Nossas Categorias</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesList}>
-                        {categories.map((cat) => (
-                            <CategoryItem
-                                key={cat}
-                                name={cat}
-                                active={selectedCategory === cat}
-                                onPress={() => setSelectedCategory(cat)}
-                            />
-                        ))}
-                    </ScrollView>
-
-                    {/* Product Grid */}
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Mais Populares</Text>
-                        <TouchableOpacity>
-                            <Text style={styles.seeAll}>Ver todos</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {loading ? (
-                        <View style={styles.productGrid}>
+            <FlatList
+                data={filteredProducts}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: Theme.spacing.xl, marginBottom: 16 }}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 100 }}
+                ListEmptyComponent={
+                    loading ? (
+                        <View style={[styles.productGrid, { paddingHorizontal: Theme.spacing.xl }]}>
                             {[1, 2, 3, 4].map(idx => (
-                                <View key={idx} style={styles.productCard}>
+                                <View key={idx} style={[styles.productCard, { width: (width - Theme.spacing.xl * 2 - 16) / 2 }]}>
                                     <Skeleton width="100%" height={150} borderRadius={0} />
                                     <View style={styles.productInfo}>
                                         <Skeleton width="70%" height={16} style={{ marginBottom: 8 }} />
@@ -174,43 +148,159 @@ export const HomeScreen = () => {
                                 </View>
                             ))}
                         </View>
-                    ) : filteredProducts.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Text style={{ fontSize: 40 }}>ðŸ§</Text>
-                            <Text style={styles.emptyText}>NÃ£o encontramos esse bolo. Mas podemos fazer um especial para vocÃª!</Text>
-                            <TouchableOpacity style={styles.emptyButton} onPress={handleStartQuotation}>
-                                <Text style={styles.emptyButtonText}>PEDIR ORÃ‡AMENTO PERSONALIZADO</Text>
-                            </TouchableOpacity>
-                        </View>
                     ) : (
-                        <View style={styles.productGrid}>
-                            {filteredProducts.map(product => (
-                                <ProductCard key={product.id} product={product} />
-                            ))}
+                        <View style={styles.emptyContainer}>
+                            <Text style={{ fontSize: 40, marginBottom: 12 }}>🔍</Text>
+                            <Text style={[styles.emptyText, { textAlign: 'center' }]}>
+                                {debouncedSearch ? "Nenhum produto encontrado" : "Ainda não temos produtos nesta categoria."}
+                            </Text>
                         </View>
-                    )}
-                </View>
-            </ScrollView>
+                    )
+                }
+                renderItem={({ item }) => (
+                    <ProductCard product={item} />
+                )}
+                ListHeaderComponent={
+                    <>
+                        {/* Header Gradient */}
+                        <LinearGradient
+                            colors={[Theme.colors.gradientStart, Theme.colors.gradientMid, Theme.colors.gradientEnd]}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.header}
+                        >
+                            <View style={styles.headerTop}>
+                                <View style={styles.logoRow}>
+                                    <Image source={require('../../assets/logo.jpeg')} style={styles.headerLogo} />
+                                    <View>
+                                        <Text style={styles.brandTitle}>Puculuxa</Text>
+                                        <Text style={styles.brandSubtitle}>Cakes & Catering</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.headerActions}>
+                                    <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('Cart')}>
+                                        <ShoppingCart size={24} color="white" />
+                                        {cartItemsCount > 0 && (
+                                            <View style={styles.badge}>
+                                                <Text style={styles.badgeText}>{cartItemsCount}</Text>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.headerIcon} onPress={handleOpenProfile}>
+                                        <User size={24} color="white" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
 
-            {/* Bottom Navigation Mock */}
-            <View style={styles.bottomNav}>
-                <TouchableOpacity style={styles.navItem}>
-                    <Star size={24} color={Theme.colors.primary} />
-                    <Text style={[styles.navText, { color: Theme.colors.primary }]}>Início</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem}>
-                    <Star size={24} color={Theme.colors.textSecondary} />
-                    <Text style={styles.navText}>CatÃ¡logo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem} onPress={handleStartQuotation}>
-                    <UtensilsCrossed size={24} color={Theme.colors.textSecondary} />
-                    <Text style={styles.navText}>Pedido</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.navItem} onPress={handleOpenProfile}>
-                    <User size={24} color={Theme.colors.textSecondary} />
-                    <Text style={styles.navText}>Perfil</Text>
-                </TouchableOpacity>
-            </View>
+                            {/* Search Bar with Scalloped feel */}
+                            <View style={styles.searchContainer}>
+                                <Search size={20} color={Theme.colors.textSecondary} style={styles.searchIcon} />
+                                <TextInput
+                                    placeholder="O que você está procurando?"
+                                    placeholderTextColor={Theme.colors.textSecondary}
+                                    style={styles.searchInput}
+                                    value={searchTerm}
+                                    onChangeText={setSearchTerm}
+                                />
+                            </View>
+                        </LinearGradient>
+
+                        <View style={{ marginTop: 20 }}>
+                            {/* Promo Banner */}
+                            <View style={{ marginHorizontal: 20, marginBottom: 24, backgroundColor: Theme.colors.accent, borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 18, marginBottom: 4 }}>Surpresa de Fim-de-Semana!</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, marginBottom: 12 }}>Use o código FINAL20 para 20% de desconto em bolos clássicos.</Text>
+                                    <TouchableOpacity style={{ backgroundColor: 'white', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, alignSelf: 'flex-start' }}>
+                                        <Text style={{ color: Theme.colors.accent, fontWeight: 'bold', fontSize: 12 }}>COPIAR CÓDIGO</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <Text style={{ fontSize: 48 }}>🎁</Text>
+                            </View>
+
+                            {/* Categorias */}
+                            <View style={[styles.section, { flex: 1, paddingBottom: 0 }]}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                    <Text style={styles.sectionTitle}>Nosso Catálogo</Text>
+                                    <TouchableOpacity onPress={toggleSort} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Text style={{ fontSize: 12, color: Theme.colors.primary, fontWeight: 'bold' }}>{getSortLabel()}</Text>
+                                        <ChevronDown size={14} color={Theme.colors.primary} />
+                                    </TouchableOpacity>
+                                </View>
+                                <FlatList
+                                    data={categories}
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    keyExtractor={(item) => item}
+                                    contentContainerStyle={styles.categoriesList}
+                                    renderItem={({ item: cat }) => (
+                                        <CategoryItem
+                                            name={cat}
+                                            active={selectedCategory === cat}
+                                            onPress={() => setSelectedCategory(cat)}
+                                        />
+                                    )}
+                                />
+                            </View>
+
+                            <TouchableOpacity
+                                style={{ backgroundColor: '#FFEBF0', borderRadius: 16, padding: 20, marginHorizontal: 20, marginBottom: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                                onPress={() => navigation.navigate('CakeDesigner')}
+                                activeOpacity={0.8}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: Theme.colors.primary, marginBottom: 4 }}>Crie o Seu Bolo!</Text>
+                                    <Text style={{ fontSize: 13, color: Theme.colors.textSecondary }}>Personalize andares e cores no nosso Estúdio 3D.</Text>
+                                </View>
+                                <Text style={{ fontSize: 40, marginLeft: 16 }}>🎂</Text>
+                            </TouchableOpacity>
+
+                            {/* Pacotes e Combos */}
+                            <View style={[styles.section, { marginTop: 8 }]}>
+                                <Text style={styles.sectionTitle}>Pacotes Especiais</Text>
+                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary, marginBottom: 16 }}>Poupe até 30% com os nossos combos</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={296}>
+                                    {[
+                                        { title: 'Combo Festa Infantil', price: 'Kz 85.000', img: 'https://images.unsplash.com/photo-1530105832479-e2f4eb78d384?q=80&w=400&auto=format&fit=crop' },
+                                        { title: 'Kit Casamento Civil', price: 'Kz 150.000', img: 'https://images.unsplash.com/photo-1542475141-94578b8871ab?q=80&w=400&auto=format&fit=crop' }
+                                    ].map((bundle, idx) => (
+                                        <View key={idx} style={{ width: 280, borderRadius: 16, marginRight: 16, backgroundColor: 'white', overflow: 'hidden', ...Theme.shadows?.light }}>
+                                            <Image source={{ uri: bundle.img }} style={{ width: '100%', height: 140, backgroundColor: '#f0f0f0' }} />
+                                            <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <View>
+                                                    <Text style={{ fontWeight: 'bold', fontSize: 16, color: Theme.colors.primary }}>{bundle.title}</Text>
+                                                    <Text style={{ fontSize: 14, color: Theme.colors.textSecondary, marginTop: 4 }}>A partir de {bundle.price}</Text>
+                                                </View>
+                                                <TouchableOpacity style={{ backgroundColor: '#f0f0f0', padding: 8, borderRadius: 8 }}>
+                                                    <Text style={{ fontSize: 20 }}>🛒</Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </View>
+
+                            {/* Portfólio / Inspirações */}
+                            <View style={[styles.section, { marginTop: 8, paddingBottom: 100 }]}>
+                                <Text style={styles.sectionTitle}>Galeria Premium</Text>
+                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary, marginBottom: 16 }}>Inspirações dos nossos melhores eventos</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} decelerationRate="fast" snapToInterval={296}>
+                                    {[
+                                        'https://images.unsplash.com/photo-1535141192574-5d4897c12636?q=80&w=400&auto=format&fit=crop',
+                                        'https://images.unsplash.com/photo-1621303837174-89787a7d4729?q=80&w=400&auto=format&fit=crop',
+                                        'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=400&auto=format&fit=crop'
+                                    ].map((img, idx) => (
+                                        <Image key={idx} source={{ uri: img }} style={{ width: 280, height: 200, borderRadius: 16, marginRight: 16, backgroundColor: '#f0f0f0' }} />
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </View>
+                    </>
+                }
+            />
+
+            {/* Bottom Navigation Mock Replaced with Real Navigation Component */}
+            <BottomNav />
         </View>
     );
 };
@@ -232,6 +322,18 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: Theme.spacing.xl,
+    },
+    logoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    headerLogo: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        marginRight: 12,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.2)'
     },
     brandTitle: {
         fontFamily: Theme.fonts.title,

@@ -15,33 +15,34 @@ import { CommonModule } from './common/common.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { EventsModule } from './events/events.module';
+import { ChatModule } from './chat/chat.module';
 
 const useRedis = process.env.USE_REDIS === 'true';
 
 const cacheModuleConfig = useRedis
   ? CacheModule.registerAsync({
-      isGlobal: true,
-      useFactory: async () => ({
-        store: await redisStore({
-          socket: {
-            host: process.env.REDIS_HOST || 'localhost',
-            port: parseInt(process.env.REDIS_PORT || '6379', 10),
-          },
-        }),
-        ttl: 300000,
-      }),
-    })
-  : CacheModule.register({ isGlobal: true, ttl: 300000 }); // In-memory fallback for local dev
-
-const bullModuleConfig = useRedis
-  ? [
-      BullModule.forRoot({
-        connection: {
+    isGlobal: true,
+    useFactory: async () => ({
+      store: await redisStore({
+        socket: {
           host: process.env.REDIS_HOST || 'localhost',
           port: parseInt(process.env.REDIS_PORT || '6379', 10),
         },
       }),
-    ]
+      ttl: 300000,
+    }),
+  })
+  : CacheModule.register({ isGlobal: true, ttl: 300000 }); // In-memory fallback for local dev
+
+const bullModuleConfig = useRedis
+  ? [
+    BullModule.forRoot({
+      connection: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      },
+    }),
+  ]
   : [];
 
 @Module({
@@ -63,6 +64,7 @@ const bullModuleConfig = useRedis
     CommonModule,
     AnalyticsModule,
     FeedbackModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
@@ -73,4 +75,4 @@ const bullModuleConfig = useRedis
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

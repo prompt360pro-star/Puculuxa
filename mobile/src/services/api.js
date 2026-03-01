@@ -12,6 +12,55 @@ const getHeaders = async () => {
     };
 };
 
+const fetchWithAuth = async (url, options = {}) => {
+    let headers = await getHeaders();
+    if (options.headers) {
+        headers = { ...headers, ...options.headers };
+    }
+
+    let response = await fetch(url, { ...options, headers });
+
+    // Automatic Token Refresh Interceptor
+    if (response.status === 401) {
+        try {
+            const refreshToken = await AsyncStorage.getItem('puculuxa_refresh_token');
+            const userStr = await AsyncStorage.getItem('puculuxa_user');
+
+            if (refreshToken && userStr) {
+                const user = JSON.parse(userStr);
+                const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: user.id, refreshToken })
+                });
+
+                if (refreshRes.ok) {
+                    const data = await refreshRes.json();
+                    await AsyncStorage.setItem('puculuxa_token', data.access_token);
+                    if (data.refresh_token) {
+                        await AsyncStorage.setItem('puculuxa_refresh_token', data.refresh_token);
+                    }
+
+                    // Retry original request with new token
+                    headers['Authorization'] = `Bearer ${data.access_token}`;
+                    if (options.headers && options.headers['Authorization']) {
+                        options.headers['Authorization'] = headers['Authorization'];
+                    }
+                    response = await fetch(url, { ...options, headers });
+                } else {
+                    await ApiService.logout();
+                }
+            } else {
+                await ApiService.logout();
+            }
+        } catch (e) {
+            await ApiService.logout();
+        }
+    }
+
+    return response;
+};
+
 export const ApiService = {
     async login(email, password) {
         try {
@@ -28,6 +77,9 @@ export const ApiService = {
 
             const data = await response.json();
             await AsyncStorage.setItem('puculuxa_token', data.access_token);
+            if (data.refresh_token) {
+                await AsyncStorage.setItem('puculuxa_refresh_token', data.refresh_token);
+            }
             await AsyncStorage.setItem('puculuxa_user', JSON.stringify(data.user));
             return data;
         } catch (error) {
@@ -58,14 +110,14 @@ export const ApiService = {
 
     async logout() {
         await AsyncStorage.removeItem('puculuxa_token');
+        await AsyncStorage.removeItem('puculuxa_refresh_token');
         await AsyncStorage.removeItem('puculuxa_user');
     },
 
     async postQuotation(data) {
         try {
-            const response = await fetch(`${BASE_URL}/quotations`, {
+            const response = await fetchWithAuth(`${BASE_URL}/quotations`, {
                 method: 'POST',
-                headers: await getHeaders(),
                 body: JSON.stringify(data),
             });
 
@@ -86,11 +138,12 @@ export const ApiService = {
                 type: 'image/jpeg'
             });
 
+            // For multipart/form-data, do not set 'Content-Type', let fetch set it with boundary
             const token = await AsyncStorage.getItem('puculuxa_token');
-            const response = await fetch(`${BASE_URL}/quotations/upload`, {
+            const response = await fetchWithAuth(`${BASE_URL}/quotations/upload`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': token ? `Bearer ${token}` : '',
+                    'Content-Type': 'multipart/form-data',
                 },
                 body: formData,
             });
@@ -104,19 +157,14 @@ export const ApiService = {
     },
 
     async getProducts() {
-        const response = await fetch(`${BASE_URL}/products`, {
-            headers: await getHeaders(),
-        });
+        const response = await fetchWithAuth(`${BASE_URL}/products`);
         if (!response.ok) throw new Error('Falha ao buscar produtos');
         const result = await response.json();
-        // A API Backend agora retorna paginação: { data: [...], meta: {...} }
         return result.data || result;
     },
 
     async getMyOrders() {
-        const response = await fetch(`${BASE_URL}/orders/my`, {
-            headers: await getHeaders(),
-        });
+        const response = await fetchWithAuth(`${BASE_URL}/orders/my`);
         if (!response.ok) throw new Error('Falha ao buscar histórico de pedidos');
         return await response.json();
     },
@@ -126,13 +174,49 @@ export const ApiService = {
         return user ? JSON.parse(user) : null;
     },
 
+    async postOrder(data) {
+        try {
+            const response = await fetchWithAuth(`${BASE_URL}/orders`, {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+
+            if (!response.ok) throw new Error('Falha ao criar pedido');
+            return await response.json();
+        } catch (error) {
+            console.error('Order API Error:', error);
+            throw error;
+        }
+    },
+
     async updateProfile(data) {
-        const response = await fetch(`${BASE_URL}/auth/profile`, {
+        const response = await fetchWithAuth(`${BASE_URL}/auth/profile`, {
             method: 'PATCH',
-            headers: await getHeaders(),
             body: JSON.stringify(data),
         });
         if (!response.ok) throw new Error('Falha ao actualizar perfil');
+        return await response.json();
+    },
+
+    async getMyMessages() {
+        const response = await fetchWithAuth(`${BASE_URL}/chat/my`);
+        if (!response.ok) throw new Error('Falha ao buscar mensagens');
+        return await response.json();
+    },
+
+    async sendChatMessage(text) {
+        const response = await fetchWithAuth(`${BASE_URL}/chat/my`, {
+            method: 'POST',
+            body: JSON.stringify({ text }),
+        });
+        if (!response.ok) throw new Error('Falha ao enviar mensagem');
+        return await response.json();
+    },
+
+    async getBlockedDates() {
+        // Doesn't need auth according to controller
+        const response = await fetch(`${BASE_URL}/quotations/blocked-dates`);
+        if (!response.ok) throw new Error('Falha ao buscar datas bloqueadas');
         return await response.json();
     }
 };

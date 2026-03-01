@@ -11,7 +11,7 @@ export class QuotationService {
     private readonly pdfService: PdfService,
     private prisma: PrismaService,
     private events: EventsGateway,
-  ) {}
+  ) { }
 
   async create(data: CreateQuotationDto) {
     const result = calculateQuotation({
@@ -42,6 +42,23 @@ export class QuotationService {
     return this.prisma.quotation.findMany({
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getBlockedDates() {
+    const quotations = await this.prisma.quotation.findMany({
+      where: {
+        status: { in: ['APPROVED', 'PRODUCING', 'READY', 'DELIVERED', 'COMPLETED'] },
+        eventDate: { not: null },
+      },
+      select: { eventDate: true },
+    });
+
+    // Extract unique ISO date strings (YYYY-MM-DD)
+    const dates = quotations
+      .map(q => q.eventDate ? q.eventDate.toISOString().split('T')[0] : null)
+      .filter(d => d !== null);
+
+    return [...new Set(dates)];
   }
 
   async findOne(id: string) {

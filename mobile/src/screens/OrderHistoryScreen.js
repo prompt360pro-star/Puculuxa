@@ -1,11 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
-import { ChevronLeft, Package, Clock, CheckCircle, XCircle } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, LayoutAnimation, UIManager, Platform } from 'react-native';
+import { ChevronLeft, Package, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { Theme } from '../theme';
 import { ApiService } from '../services/api';
 import { Skeleton } from '../components/ui/Skeleton';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const StatusBadge = ({ status }) => {
     let color = '#FFA000';
@@ -13,7 +17,7 @@ const StatusBadge = ({ status }) => {
     let label = 'Pendente';
     let Icon = Clock;
 
-    if (status === 'COMPLETED') {
+    if (status === 'DELIVERED' || status === 'COMPLETED') {
         color = '#4CAF50';
         bgColor = '#E8F5E9';
         label = 'Concluído';
@@ -23,6 +27,11 @@ const StatusBadge = ({ status }) => {
         bgColor = '#FFEBEE';
         label = 'Cancelado';
         Icon = XCircle;
+    } else if (status === 'APPROVED' || status === 'PRODUCING' || status === 'READY') {
+        color = '#2196F3';
+        bgColor = '#E3F2FD';
+        label = 'Em Progresso';
+        Icon = Clock;
     }
 
     return (
@@ -35,6 +44,8 @@ const StatusBadge = ({ status }) => {
 
 export const OrderHistoryScreen = () => {
     const navigation = useNavigation();
+    const [activeTab, setActiveTab] = useState('ACTIVE'); // ACTIVE or HISTORY
+    const [expandedOrderId, setExpandedOrderId] = useState(null);
 
     const { data: orders, isLoading, isError, refetch, isRefetching } = useQuery({
         queryKey: ['myOrders'],
@@ -46,10 +57,16 @@ export const OrderHistoryScreen = () => {
         const date = new Date(item.createdAt).toLocaleDateString('pt-BR', {
             day: '2-digit', month: 'short', year: 'numeric'
         });
+        const isExpanded = expandedOrderId === item.id;
+
+        const toggleExpand = () => {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setExpandedOrderId(isExpanded ? null : item.id);
+        };
 
         return (
-            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7}>
-                <View style={styles.orderHeader}>
+            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={toggleExpand}>
+                <View style={[styles.orderHeader, isExpanded && { borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 12, marginBottom: 12 }]}>
                     <View style={styles.orderHeaderLeft}>
                         <View style={styles.iconBox}>
                             <Package size={20} color={Theme.colors.primary} />
@@ -62,12 +79,32 @@ export const OrderHistoryScreen = () => {
                     <StatusBadge status={item.status} />
                 </View>
 
-                <View style={styles.orderDetails}>
-                    <Text style={styles.orderItems}>
-                        {item.items.length} {item.items.length === 1 ? 'item' : 'itens'}
-                    </Text>
-                    <Text style={styles.orderTotal}>Kz {item.total.toLocaleString('pt-BR')}</Text>
-                </View>
+                {!isExpanded ? (
+                    <View style={styles.orderDetails}>
+                        <Text style={styles.orderItems}>{item.items.length} {item.items.length === 1 ? 'item' : 'itens'}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={styles.orderTotal}>Kz {item.total?.toLocaleString('pt-BR') || '0'}</Text>
+                            <ChevronDown size={16} color={Theme.colors.textSecondary} />
+                        </View>
+                    </View>
+                ) : (
+                    <View style={styles.expandedDetails}>
+                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: Theme.colors.textSecondary, marginBottom: 8, textTransform: 'uppercase' }}>Itens do Pedido</Text>
+                        {item.items.map((prod, idx) => (
+                            <View key={idx} style={styles.expandedItemRow}>
+                                <Text style={styles.expandedItemName} numberOfLines={1}>{prod.quantity}x {prod.name}</Text>
+                                <Text style={styles.expandedItemPrice}>Kz {(prod.price * prod.quantity).toLocaleString('pt-BR')}</Text>
+                            </View>
+                        ))}
+                        <View style={styles.expandedTotalRow}>
+                            <Text style={styles.expandedTotalLabel}>Total</Text>
+                            <Text style={styles.expandedTotalValue}>Kz {item.total?.toLocaleString('pt-BR') || '0'}</Text>
+                        </View>
+                        <View style={{ alignItems: 'center', marginTop: 12 }}>
+                            <ChevronUp size={16} color={Theme.colors.textSecondary} />
+                        </View>
+                    </View>
+                )}
             </TouchableOpacity>
         );
     };
@@ -86,8 +123,17 @@ export const OrderHistoryScreen = () => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <ChevronLeft size={24} color={Theme.colors.textPrimary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Histórico de Pedidos</Text>
+                <Text style={styles.headerTitle}>Meus Pedidos</Text>
                 <View style={{ width: 40 }} /> {/* Placeholder for alignment */}
+            </View>
+
+            <View style={styles.tabContainer}>
+                <TouchableOpacity style={[styles.tab, activeTab === 'ACTIVE' && styles.tabActive]} onPress={() => setActiveTab('ACTIVE')}>
+                    <Text style={[styles.tabText, activeTab === 'ACTIVE' && styles.tabTextActive]}>Em Andamento</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'HISTORY' && styles.tabActive]} onPress={() => setActiveTab('HISTORY')}>
+                    <Text style={[styles.tabText, activeTab === 'HISTORY' && styles.tabTextActive]}>Histórico</Text>
+                </TouchableOpacity>
             </View>
 
             {isLoading ? (
@@ -107,7 +153,7 @@ export const OrderHistoryScreen = () => {
                 </View>
             ) : (
                 <FlatList
-                    data={orders}
+                    data={orders.filter(o => activeTab === 'ACTIVE' ? (o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED') : (o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED'))}
                     keyExtractor={(item) => item.id}
                     renderItem={renderOrderItem}
                     contentContainerStyle={styles.listContainer}
@@ -115,6 +161,11 @@ export const OrderHistoryScreen = () => {
                     refreshControl={
                         <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={[Theme.colors.primary]} />
                     }
+                    ListEmptyComponent={() => (
+                        <View style={[styles.emptyContainer, { marginTop: 40 }]}>
+                            <Text style={styles.emptyText}>Não tens pedidos {activeTab === 'ACTIVE' ? 'em andamento' : 'no histórico'}.</Text>
+                        </View>
+                    )}
                 />
             )}
         </View>
@@ -248,4 +299,24 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
     },
+    tabContainer: {
+        flexDirection: 'row', backgroundColor: 'white', paddingHorizontal: Theme.spacing.lg,
+        paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0'
+    },
+    tab: {
+        flex: 1, paddingVertical: 12, alignItems: 'center',
+        borderBottomWidth: 2, borderBottomColor: 'transparent'
+    },
+    tabActive: {
+        borderBottomColor: Theme.colors.primary
+    },
+    tabText: { fontSize: 14, fontWeight: '600', color: Theme.colors.textSecondary },
+    tabTextActive: { color: Theme.colors.primary },
+    expandedDetails: { marginTop: 8 },
+    expandedItemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    expandedItemName: { fontSize: 14, color: '#333', flex: 1, marginRight: 16 },
+    expandedItemPrice: { fontSize: 14, color: Theme.colors.textSecondary, fontWeight: '500' },
+    expandedTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
+    expandedTotalLabel: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+    expandedTotalValue: { fontSize: 18, fontWeight: 'bold', color: Theme.colors.primary },
 });

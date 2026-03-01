@@ -15,13 +15,10 @@ export default function LandingPage() {
         {/* Logo Section */}
         <div className="relative group animate-fade-in-up">
           <div className="absolute inset-0 bg-puculuxa-orange/20 blur-2xl rounded-full scale-0 group-hover:scale-110 transition-transform duration-500" />
-          <Image
-            src="/logo-puculuxa.png"
+          <img
+            src="/logo.jpeg"
             alt="Puculuxa Logo"
-            width={320}
-            height={320}
-            className="relative transform transition-transform duration-500 group-hover:scale-105"
-            priority
+            className="w-32 h-32 md:w-48 md:h-48 relative transform transition-transform duration-500 group-hover:scale-105 rounded-full object-cover shadow-2xl"
           />
         </div>
 

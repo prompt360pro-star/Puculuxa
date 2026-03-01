@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
-import { ArrowLeft, Heart, ShoppingCart } from 'lucide-react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Share } from 'react-native';
+import { ArrowLeft, Heart, ShoppingCart, Share2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Theme } from '../theme';
 import { useCartStore } from '../store/cartStore';
+import { BottomNav } from '../components/ui/BottomNav';
 
 // Simple favorites store — tracks product ids
 import { create } from 'zustand';
@@ -35,6 +36,18 @@ export const FavoritesScreen = () => {
     const navigation = useNavigation();
     const { favorites, toggle } = useFavoritesStore();
     const addItem = useCartStore((s) => s.addItem);
+
+    const handleShareWislist = async () => {
+        if (favorites.length === 0) return;
+        try {
+            const itemsList = favorites.map(f => `- ${f.name}`).join('\n');
+            await Share.share({
+                message: `💖 Olha a minha Lista de Desejos no Puculuxa:\n\n${itemsList}\n\nFaz o download do app e encomenda já!`,
+            });
+        } catch (error) {
+            console.log(error);
+        }
+    };
 
     const renderItem = ({ item }) => (
         <View style={styles.card}>
@@ -82,16 +95,28 @@ export const FavoritesScreen = () => {
                     <ArrowLeft size={22} color={Theme.colors.primary} />
                 </TouchableOpacity>
                 <Text style={styles.title}>Meus Favoritos</Text>
-                <View style={{ width: 40 }} />
+                {favorites.length > 0 ? (
+                    <TouchableOpacity onPress={handleShareWislist} style={styles.shareBtn}>
+                        <Share2 size={20} color={Theme.colors.primary} />
+                    </TouchableOpacity>
+                ) : (
+                    <View style={{ width: 40 }} />
+                )}
             </View>
 
             {favorites.length === 0 ? (
                 <View style={styles.empty}>
                     <Text style={{ fontSize: 48, marginBottom: 16 }}>💔</Text>
                     <Text style={styles.emptyTitle}>Sem favoritos ainda</Text>
-                    <Text style={styles.emptyText}>
+                    <Text style={[styles.emptyText, { marginBottom: 24 }]}>
                         Guarda os teus produtos preferidos tocando no ❤️ no catálogo.
                     </Text>
+                    <TouchableOpacity
+                        style={{ backgroundColor: Theme.colors.primary, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12 }}
+                        onPress={() => navigation.navigate('Home')}
+                    >
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Explorar Catálogo</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList
@@ -102,6 +127,8 @@ export const FavoritesScreen = () => {
                     showsVerticalScrollIndicator={false}
                 />
             )}
+
+            <BottomNav />
         </View>
     );
 };
@@ -118,7 +145,11 @@ const styles = StyleSheet.create({
         backgroundColor: 'white', justifyContent: 'center', alignItems: 'center',
     },
     title: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary },
-    list: { paddingHorizontal: 24, paddingBottom: 40 },
+    shareBtn: {
+        width: 40, height: 40, borderRadius: 12,
+        backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center',
+    },
+    list: { paddingHorizontal: 24, paddingBottom: 100 },
     card: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: 'white', borderRadius: 20, padding: 14,

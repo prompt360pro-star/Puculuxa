@@ -3,16 +3,70 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaLibSql } from '@prisma/adapter-libsql';
 
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     const config = { url: 'file:./prisma/dev.db' };
     const adapter = new PrismaLibSql(config);
-    super({
-      adapter,
+    super({ adapter });
+
+    const softDeleteModels = ['Product', 'Quotation', 'User', 'Order'];
+
+    const extendedClient: any = this.$extends({
+      query: {
+        $allModels: {
+          async delete({ model, args, query }: any) {
+            if (softDeleteModels.includes(model)) {
+              return (extendedClient as any)[model].update({
+                ...args,
+                data: { deletedAt: new Date() },
+              });
+            }
+            return query(args);
+          },
+          async deleteMany({ model, args, query }: any) {
+            if (softDeleteModels.includes(model)) {
+              return (extendedClient as any)[model].updateMany({
+                ...args,
+                data: { ...((args as any).data || {}), deletedAt: new Date() },
+              });
+            }
+            return query(args);
+          },
+          async findFirst({ model, args, query }: any) {
+            if (softDeleteModels.includes(model)) {
+              args.where = { ...args.where, deletedAt: null };
+            }
+            return query(args);
+          },
+          async findUnique({ model, args, query }: any) {
+            if (softDeleteModels.includes(model)) {
+              return (extendedClient as any)[model].findFirst({
+                ...args,
+                where: { ...args.where, deletedAt: null },
+              });
+            }
+            return query(args);
+          },
+          async findMany({ model, args, query }: any) {
+            if (softDeleteModels.includes(model)) {
+              args.where = { ...args.where, deletedAt: null };
+            }
+            return query(args);
+          },
+        },
+      },
     });
+
+    return new Proxy(this, {
+      get: (target, prop) => {
+        if (prop === 'onModuleInit') return target.onModuleInit.bind(target);
+        if (prop === 'onModuleDestroy') return target.onModuleDestroy.bind(target);
+        if (prop in extendedClient) {
+          return (extendedClient as any)[prop];
+        }
+        return (target as any)[prop];
+      },
+    }) as any;
   }
 
   async onModuleInit() {
