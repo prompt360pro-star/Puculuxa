@@ -27,7 +27,7 @@ export class QuotationController {
     private readonly quotationService: QuotationService,
     private readonly pdfService: PdfService,
     private readonly imageService: ImageService,
-  ) { }
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Post('upload')

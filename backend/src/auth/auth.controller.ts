@@ -18,7 +18,7 @@ import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @Post('login')
   @UsePipes(new ValidationPipe())
@@ -34,11 +34,14 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refresh(@Body() body: { userId: string, refreshToken: string }) {
+  async refresh(@Body() body: { userId: string; refreshToken: string }) {
     if (!body.userId || !body.refreshToken) {
       throw new UnauthorizedException('Missing refresh token or user id');
     }
-    const result = await this.authService.refreshToken(body.userId, body.refreshToken);
+    const result = await this.authService.refreshToken(
+      body.userId,
+      body.refreshToken,
+    );
     if (!result) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }

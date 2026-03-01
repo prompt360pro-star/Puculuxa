@@ -14,7 +14,7 @@ import { RolesGuard, Roles } from '../auth/roles.guard';
 
 @Controller('feedbacks')
 export class FeedbackController {
-  constructor(private readonly feedbackService: FeedbackService) { }
+  constructor(private readonly feedbackService: FeedbackService) {}
 
   @UseGuards(JwtAuthGuard)
   @Post()

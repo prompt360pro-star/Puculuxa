@@ -24,7 +24,7 @@ export class ProductController {
   constructor(
     private readonly productService: ProductService,
     private readonly imageService: ImageService,
-  ) { }
+  ) {}
 
   @Get()
   findAll(@Query('page') page: string, @Query('limit') limit: string) {

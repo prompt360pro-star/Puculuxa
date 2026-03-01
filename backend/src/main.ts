@@ -6,13 +6,9 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for frontend access
+  // Enable CORS for frontend access (Updated to allow Expo Go mobile devices on the network)
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || [
-      'http://localhost:4000',
-      'http://localhost:3000',
-      'http://localhost:6005',
-    ],
+    origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
@@ -29,6 +25,7 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 3000);
+  // Binding a '0.0.0.0' garante que o node expõe a API não só para localhost mas para fora na rede (Wi-Fi)
+  await app.listen(process.env.PORT ?? 4001, '0.0.0.0');
 }
 void bootstrap();

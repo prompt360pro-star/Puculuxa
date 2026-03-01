@@ -16,12 +16,20 @@ export class AuthService {
     email: string,
     pass: string,
   ): Promise<Omit<User, 'password'> | null> {
+    console.log(`\n\n[AUTH-DIAGNOSTIC] Tentativa de Login Recebida`);
+    console.log(`[AUTH-DIAGNOSTIC] Email fornecido: "${email}"`);
+    console.log(`[AUTH-DIAGNOSTIC] Password fornecida: "${pass}"`);
+
     const user = await this.prisma.user.findUnique({ where: { email } });
+    console.log(`[AUTH-DIAGNOSTIC] Utilizador encontrado na DB:`, user ? `SIM (Role: ${user.role})` : `NÃO ENCONTRADO`);
+
     if (user && (await bcrypt.compare(pass, user.password))) {
+      console.log(`[AUTH-DIAGNOSTIC] Match BCRYPT: SUCESSO`);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...result } = user;
       return result;
     }
+    console.log(`[AUTH-DIAGNOSTIC] Match BCRYPT: FALHA (Ou User não existe)`);
     return null;
   }
 
@@ -36,7 +44,7 @@ export class AuthService {
     const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { refreshToken: hashedRefreshToken }
+      data: { refreshToken: hashedRefreshToken },
     });
 
     return {
@@ -58,7 +66,10 @@ export class AuthService {
       return null;
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+    const isRefreshTokenValid = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken,
+    );
     if (!isRefreshTokenValid) {
       return null;
     }
@@ -90,7 +101,10 @@ export class AuthService {
     return result;
   }
 
-  async updateProfile(id: string, data: { name?: string; phone?: string; address?: string }) {
+  async updateProfile(
+    id: string,
+    data: { name?: string; phone?: string; address?: string },
+  ) {
     const updated = await this.prisma.user.update({
       where: { id },
       data,
@@ -103,7 +117,8 @@ export class AuthService {
   async requestPasswordReset(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Always respond with success to avoid user enumeration
-    if (!user) return { message: 'Se o e-mail existir, as instruções serão enviadas.' };
+    if (!user)
+      return { message: 'Se o e-mail existir, as instruções serão enviadas.' };
 
     // Generate a short-lived signed token (15 min expiry)
     const token = this.jwtService.sign(
@@ -125,15 +140,21 @@ export class AuthService {
   async resetPassword(token: string, newPassword: string) {
     let payload: { sub: string; purpose: string };
     try {
-      payload = this.jwtService.verify(token) as { sub: string; purpose: string };
+      payload = this.jwtService.verify(token) as {
+        sub: string;
+        purpose: string;
+      };
     } catch {
       throw new Error('Token inválido ou expirado');
     }
 
     if (payload.purpose !== 'reset') throw new Error('Token inválido');
 
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || user.resetToken !== token) throw new Error('Token já utilizado');
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!user || user.resetToken !== token)
+      throw new Error('Token já utilizado');
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({

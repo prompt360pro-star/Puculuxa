@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { Search, ShoppingCart, User, UtensilsCrossed, Heart } from 'lucide-react-native';
+import { Search, ShoppingCart, User, UtensilsCrossed, Heart, Star } from 'lucide-react-native';
 import { Theme } from '../theme';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useQuery } from '@tanstack/react-query';
@@ -62,7 +62,7 @@ const ProductCard = ({ product }) => {
                     </TouchableOpacity>
                 </View>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 };
 
@@ -195,8 +195,8 @@ export const HomeScreen = () => {
             {/* Bottom Navigation Mock */}
             <View style={styles.bottomNav}>
                 <TouchableOpacity style={styles.navItem}>
-                    <Cake size={24} color={Theme.colors.primary} />
-                    <Text style={[styles.navText, { color: Theme.colors.primary }]}>InÃ­cio</Text>
+                    <Star size={24} color={Theme.colors.primary} />
+                    <Text style={[styles.navText, { color: Theme.colors.primary }]}>Início</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.navItem}>
                     <Star size={24} color={Theme.colors.textSecondary} />

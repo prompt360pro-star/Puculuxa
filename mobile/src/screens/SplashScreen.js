@@ -23,9 +23,9 @@ export const SplashScreen = ({ navigation }) => {
             }),
         ]).start();
 
-        // Simula carregamento e navega para Home
+        // Simula carregamento e navega para Login (o estado de auth do App.js redireciona para Home se logado)
         const timer = setTimeout(() => {
-            navigation.navigate('Home');
+            navigation.replace('Login');
         }, 3000);
 
         return () => clearTimeout(timer);

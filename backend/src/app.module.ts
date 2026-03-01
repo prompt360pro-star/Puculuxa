@@ -16,21 +16,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { EventsModule } from './events/events.module';
 
-@Module({
-  imports: [
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000,
-        limit: 50,
-      },
-    ]),
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379', 10),
-      },
-    }),
-    CacheModule.registerAsync({
+const useRedis = process.env.USE_REDIS === 'true';
+
+const cacheModuleConfig = useRedis
+  ? CacheModule.registerAsync({
       isGlobal: true,
       useFactory: async () => ({
         store: await redisStore({
@@ -39,9 +28,32 @@ import { EventsModule } from './events/events.module';
             port: parseInt(process.env.REDIS_PORT || '6379', 10),
           },
         }),
-        ttl: 300000, // 5 minutes standard caching
+        ttl: 300000,
       }),
-    }),
+    })
+  : CacheModule.register({ isGlobal: true, ttl: 300000 }); // In-memory fallback for local dev
+
+const bullModuleConfig = useRedis
+  ? [
+      BullModule.forRoot({
+        connection: {
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379', 10),
+        },
+      }),
+    ]
+  : [];
+
+@Module({
+  imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 50,
+      },
+    ]),
+    ...bullModuleConfig,
+    cacheModuleConfig,
     DatabaseModule,
     EventsModule,
     QuotationModule,

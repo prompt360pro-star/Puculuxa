@@ -16,7 +16,7 @@ export class OrderService {
   constructor(
     private prisma: PrismaService,
     private events: EventsGateway,
-  ) { }
+  ) {}
 
   async findAll(page: number = 1, limit: number = 20) {
     const skip = (page - 1) * limit;

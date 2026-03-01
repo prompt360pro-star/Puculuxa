@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, Platform, LogBox } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import * as Font from 'expo-font';
@@ -29,21 +29,40 @@ import { ProductDetailScreen } from './src/screens/ProductDetailScreen';
 import { useAuthStore } from './src/store/authStore';
 import { QueryProvider } from './src/providers/QueryProvider';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-    }),
-});
+LogBox.ignoreLogs([
+    'Unable to activate keep awake',
+    'InteractionManager has been deprecated',
+]);
+
+const isExpoGo = Constants.appOwnership === 'expo';
+let Notifications = null;
+
+if (!isExpoGo) {
+    Notifications = require('expo-notifications');
+}
+
+if (Notifications) {
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+}
 
 // Configure simple notification permissions
 async function registerForPushNotificationsAsync() {
     let token;
-    if (Device.isDevice) {
+
+    if (!Notifications) {
+        console.log('Push notifications indisponíveis no Expo Go');
+        return null;
+    }
+
+    if (!isExpoGo && Device.isDevice) {
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
         if (existingStatus !== 'granted') {
@@ -58,17 +77,18 @@ async function registerForPushNotificationsAsync() {
             projectId: 'puculuxa-mobile', // dummy project id if not using EAS
         })).data;
         console.log('Expo Push Token:', token);
-    }
 
-    if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#e11d48',
-        });
+        if (Platform.OS === 'android') {
+            Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+    } else {
+        console.log('Push notifications desativadas silenciosamente (Executando no Expo Go ou Emulador).');
     }
-
     return token;
 }
 

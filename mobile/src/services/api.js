@@ -1,8 +1,8 @@
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_CONFIG } from '../config/api.config';
 
-// Substitua "localhost" pelo IP da sua máquina (ex: 192.168.0.x) se for testar num telemóvel físico via Expo Go
-const BASE_URL = 'http://localhost:4001/api';
+const BASE_URL = API_CONFIG.BASE_URL;
 
 const getHeaders = async () => {
     const token = await AsyncStorage.getItem('puculuxa_token');

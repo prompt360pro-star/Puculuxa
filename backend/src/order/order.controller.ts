@@ -14,7 +14,7 @@ import { RolesGuard, Roles } from '../auth/roles.guard';
 
 @Controller('orders')
 export class OrderController {
-  constructor(private readonly orderService: OrderService) { }
+  constructor(private readonly orderService: OrderService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

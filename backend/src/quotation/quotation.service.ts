@@ -11,7 +11,7 @@ export class QuotationService {
     private readonly pdfService: PdfService,
     private prisma: PrismaService,
     private events: EventsGateway,
-  ) { }
+  ) {}
 
   async create(data: CreateQuotationDto) {
     const result = calculateQuotation({

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LogIn, Mail, Lock, ArrowRight } from 'lucide-react-native';
-import { COLORS, SPACING, RADIUS, SHADOWS } from '../theme/tokens';
+import { Theme } from '../theme';
 import { useAuthStore } from '../store/authStore';
 
 export default function LoginScreen({ navigation }) {
@@ -43,7 +43,7 @@ export default function LoginScreen({ navigation }) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
                     <View style={styles.logoCircle}>
-                        <LogIn size={40} color={COLORS.primary} />
+                        <LogIn size={40} color={Theme.colors.primary} />
                     </View>
                     <Text style={styles.title}>Bem-vindo de volta!</Text>
                     <Text style={styles.subtitle}>Acesse sua conta para gerenciar seus pedidos e orçamentos.</Text>
@@ -51,7 +51,7 @@ export default function LoginScreen({ navigation }) {
 
                 <View style={styles.form}>
                     <View style={styles.inputContainer}>
-                        <Mail size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
+                        <Mail size={20} color={Theme.colors.textSecondary} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="E-mail"
@@ -63,7 +63,7 @@ export default function LoginScreen({ navigation }) {
                     </View>
 
                     <View style={styles.inputContainer}>
-                        <Lock size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
+                        <Lock size={20} color={Theme.colors.textSecondary} style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="Senha"
@@ -79,7 +79,7 @@ export default function LoginScreen({ navigation }) {
                         disabled={loading}
                     >
                         <LinearGradient
-                            colors={[COLORS.primary, COLORS.secondary]}
+                            colors={[Theme.colors.primary, Theme.colors.secondary]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 0 }}
                             style={styles.gradient}
@@ -112,39 +112,39 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
+        backgroundColor: Theme.colors.background,
     },
     scrollContent: {
         flexGrow: 1,
-        padding: SPACING.xl,
+        padding: Theme.spacing.xl,
         justifyContent: 'center',
     },
     header: {
         alignItems: 'center',
-        marginBottom: SPACING.huge,
+        marginBottom: Theme.spacing.huge,
     },
     logoCircle: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: COLORS.white,
+        backgroundColor: 'white',
         justifyContent: 'center',
         alignItems: 'center',
-        ...SHADOWS.light,
-        marginBottom: SPACING.lg,
+        ...Theme.shadows.light,
+        marginBottom: Theme.spacing.lg,
     },
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: COLORS.primary,
-        marginBottom: SPACING.xs,
+        color: Theme.colors.primary,
+        marginBottom: Theme.spacing.xs,
         textAlign: 'center',
     },
     subtitle: {
         fontSize: 16,
-        color: COLORS.textSecondary,
+        color: Theme.colors.textSecondary,
         textAlign: 'center',
-        paddingHorizontal: SPACING.lg,
+        paddingHorizontal: Theme.spacing.lg,
     },
     form: {
         width: '100%',
@@ -152,26 +152,26 @@ const styles = StyleSheet.create({
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: COLORS.white,
-        borderRadius: RADIUS.md,
-        marginBottom: SPACING.lg,
-        paddingHorizontal: SPACING.md,
+        backgroundColor: 'white',
+        borderRadius: Theme.radius.md,
+        marginBottom: Theme.spacing.lg,
+        paddingHorizontal: Theme.spacing.md,
         height: 55,
-        ...SHADOWS.light,
+        ...Theme.shadows.light,
     },
     inputIcon: {
-        marginRight: SPACING.md,
+        marginRight: Theme.spacing.md,
     },
     input: {
         flex: 1,
         fontSize: 16,
-        color: COLORS.textPrimary,
+        color: Theme.colors.textPrimary,
     },
     button: {
-        marginTop: SPACING.md,
-        borderRadius: RADIUS.md,
+        marginTop: Theme.spacing.md,
+        borderRadius: Theme.radius.md,
         overflow: 'hidden',
-        ...SHADOWS.medium,
+        ...Theme.shadows.medium,
     },
     gradient: {
         height: 55,
@@ -186,18 +186,18 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 18,
         fontWeight: 'bold',
-        marginRight: SPACING.sm,
+        marginRight: Theme.spacing.sm,
     },
     registerLink: {
-        marginTop: SPACING.xl,
+        marginTop: Theme.spacing.xl,
         alignItems: 'center',
     },
     registerText: {
         fontSize: 15,
-        color: COLORS.textSecondary,
+        color: Theme.colors.textSecondary,
     },
     registerTextBold: {
-        color: COLORS.primary,
+        color: Theme.colors.primary,
         fontWeight: 'bold',
     },
 });
