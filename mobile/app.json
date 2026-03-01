@@ -6,6 +6,12 @@
     "sdkVersion": "55.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/logo.jpeg",
+    "splash": {
+      "image": "./assets/logo.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFC107"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -13,9 +19,15 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.puculuxa.mobile"
+      "package": "com.puculuxa.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.jpeg",
+        "backgroundColor": "#FFC107"
+      }
     },
-    "web": {},
+    "web": {
+      "favicon": "./assets/logo.jpeg"
+    },
     "plugins": [
       "expo-font",
       "@react-native-community/datetimepicker"

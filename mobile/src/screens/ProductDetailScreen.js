@@ -81,7 +81,7 @@ export const ProductDetailScreen = ({ route }) => {
                     <Image source={{ uri: product.image }} style={styles.heroImage} resizeMode="cover" />
                 ) : (
                     <View style={[styles.heroImage, styles.placeholderImage]}>
-                        <Text style={styles.placeholderEmoji}>🎂</Text>
+                        <Image source={require('../../assets/logo.jpeg')} style={{ width: 100, height: 100, opacity: 0.3 }} />
                     </View>
                 )}
                 <LinearGradient

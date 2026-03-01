@@ -43,9 +43,9 @@ export const CartScreen = () => {
     const renderItem = ({ item }) => (
         <View style={styles.cartItem}>
             {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.itemImage} fallback={<View style={[styles.itemImage, styles.imagePlaceholder]}><Text>🎂</Text></View>} />
+                <Image source={{ uri: item.image }} style={styles.itemImage} fallback={<View style={[styles.itemImage, styles.imagePlaceholder]}><Image source={require('../../assets/logo.jpeg')} style={{ width: 40, height: 40, opacity: 0.3 }} /></View>} />
             ) : (
-                <View style={[styles.itemImage, styles.imagePlaceholder]}><Text>🎂</Text></View>
+                <View style={[styles.itemImage, styles.imagePlaceholder]}><Image source={require('../../assets/logo.jpeg')} style={{ width: 40, height: 40, opacity: 0.3 }} /></View>
             )}
             <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
