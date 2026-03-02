@@ -12,6 +12,7 @@ import {
   QuotationStatus,
   QuotationVersionStatus,
 } from './quotation-status.guard';
+import { EventReminderService } from './event-reminder.service';
 
 @Injectable()
 export class QuotationService {
@@ -20,6 +21,7 @@ export class QuotationService {
     private prisma: PrismaService,
     private events: EventsGateway,
     private statusGuard: QuotationStatusGuard,
+    private reminderService: EventReminderService,
   ) { }
 
   // ─── CREATE (cliente submete orçamento) ───
@@ -253,6 +255,19 @@ export class QuotationService {
     });
 
     this.events.notifyAdmins('quotation_converted', { quotationId: id, orderId: order.id });
+
+    // Agendar reminder de recompra para o próximo ano
+    if (quotation.customerId && quotation.eventDate) {
+      const eventLabel = quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1);
+      this.reminderService.scheduleReminderForOrder(
+        quotation.customerId,
+        `${eventLabel} — recompra`,
+        quotation.eventType,
+        new Date(quotation.eventDate),
+        order.id,
+      ).catch(() => { }); // Non-blocking, não falha a conversão
+    }
+
     return order;
   }
 

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -53,6 +54,7 @@ const bullModuleConfig = useRedis
         limit: 50,
       },
     ]),
+    ScheduleModule.forRoot(),
     ...bullModuleConfig,
     cacheModuleConfig,
     DatabaseModule,
