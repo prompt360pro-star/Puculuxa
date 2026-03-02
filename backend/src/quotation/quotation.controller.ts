@@ -7,6 +7,8 @@ import {
   UseGuards,
   Param,
   Res,
+  Req,
+  Query,
   UsePipes,
   ValidationPipe,
   UseInterceptors,
@@ -17,8 +19,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { PdfService } from '../common/pdf.service';
 import { ImageService } from '../common/image.service';
-import type { Response } from 'express';
-import { CreateQuotationDto } from './dto/create-quotation.dto';
+import type { Response, Request } from 'express';
+import {
+  CreateQuotationDto,
+  UpdateQuotationStatusDto,
+  CreateQuotationVersionDto,
+} from './dto/create-quotation.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 @Controller('quotations')
@@ -29,6 +35,7 @@ export class QuotationController {
     private readonly imageService: ImageService,
   ) { }
 
+  // ─── Upload Imagem ───
   @UseGuards(JwtAuthGuard)
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
@@ -37,31 +44,82 @@ export class QuotationController {
     return { url };
   }
 
+  // ─── Criar Orçamento ───
   @Post()
-  @UsePipes(new ValidationPipe())
-  create(@Body() createQuotationDto: CreateQuotationDto) {
-    return this.quotationService.create(createQuotationDto);
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  create(@Body() dto: CreateQuotationDto, @Req() req: Request) {
+    const userId = (req as any).user?.id || null;
+    return this.quotationService.create(dto, userId);
   }
 
+  // ─── Listar Todos (Admin, com paginação e filtro) ───
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
-  findAll() {
-    return this.quotationService.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.quotationService.findAll(
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+      status,
+    );
   }
 
+  // ─── Datas Bloqueadas ───
   @Get('blocked-dates')
   getBlockedDates() {
     return this.quotationService.getBlockedDates();
   }
 
+  // ─── Detalhe (Admin) ───
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.quotationService.findOne(id);
+  }
+
+  // ─── Actualizar Status (com guard + auditoria) ───
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body('status') string: string) {
-    return this.quotationService.updateStatus(id, string);
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateQuotationStatusDto,
+    @Req() req: Request,
+  ) {
+    const adminId = (req as any).user?.id || 'ADMIN';
+    return this.quotationService.updateStatus(id, dto.status, adminId, dto.reason);
   }
 
+  // ─── Enviar Proposta (Admin cria versão + transição) ───
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/proposal')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  sendProposal(
+    @Param('id') id: string,
+    @Body() dto: CreateQuotationVersionDto,
+    @Req() req: Request,
+  ) {
+    const adminId = (req as any).user?.id || 'ADMIN';
+    return this.quotationService.sendProposal(id, adminId, dto);
+  }
+
+  // ─── Converter em Pedido (Admin) ───
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Post(':id/convert')
+  convertToOrder(@Param('id') id: string, @Req() req: Request) {
+    const adminId = (req as any).user?.id || 'ADMIN';
+    return this.quotationService.convertToOrder(id, adminId);
+  }
+
+  // ─── PDF ───
   @Get(':id/pdf')
   async getPdf(@Param('id') id: string, @Res() res: Response) {
     const quotation = await this.quotationService.findOne(id);

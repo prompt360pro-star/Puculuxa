@@ -112,7 +112,7 @@ export class PdfService {
     doc.fillColor(textDark).fontSize(11);
     doc.text(quotation.eventType, 300, rowY);
     doc.text(
-      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
       430,
       rowY,
       { align: 'right', width: 100 },
@@ -129,7 +129,7 @@ export class PdfService {
     const totalY = rowY + 60;
     doc.fillColor(textDark).fontSize(12).text('Subtotal:', 350, totalY);
     doc.text(
-      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
       430,
       totalY,
       { align: 'right', width: 100 },
@@ -140,7 +140,7 @@ export class PdfService {
       .fontSize(14)
       .text('TOTAL:', 350, totalY + 25);
     doc.text(
-      `Kz ${quotation.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
       430,
       totalY + 25,
       { align: 'right', width: 100 },

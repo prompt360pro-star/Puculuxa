@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Puculuxa — Prisma Schema v3.1
+// Sistema de Pedidos Personalizados Inteligentes
 
 generator client {
   provider = "prisma-client-js"
@@ -9,55 +9,210 @@ datasource db {
   provider = "sqlite"
 }
 
+// ─────────────────────────────────────────────
+// PRODUCT
+// ─────────────────────────────────────────────
 model Product {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  price       Float?   // null for "on request"
-  category    String
-  image       String?
-  tags        String?
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  orderItems  OrderItem[]
-  reviews     Review[]
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  price           Float?   // null = "sob consulta"
+  category        String
+  image           String?
+  tags            String?
+  servings        Int?     // porções por unidade
+  prepTimeDays    Int?     // dias de preparação
+  suggestedEvents String?  // JSON: ["casamento","aniversario"]
+  popularityScore Int      @default(0)
+  complexityBase  Int      @default(1) // 1-5
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  orderItems      OrderItem[]
+  quotationItems  QuotationItem[]
+  reviews         Review[]
 
   @@index([category])
   @@index([createdAt])
+  @@index([popularityScore])
 }
 
+// ─────────────────────────────────────────────
+// QUOTATION (expandido v3.1)
+// ─────────────────────────────────────────────
 model Quotation {
-  id            String   @id @default(cuid())
-  eventType     String
-  guestCount    Int
-  eventDate     DateTime?
-  total         Float
-  status        String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  customerName  String?
-  customerPhone String?
-  customerId    String?
-  customer      User?    @relation(fields: [customerId], references: [id])
-  referenceImage String?
-  rejectionReason String?
-  deletedAt     DateTime?
-  createdAt     DateTime @default(now())
+  id               String    @id @default(cuid())
+  eventType        String
+  guestCount       Int
+  eventDate        DateTime?
+  description      String?              // "bolo unicórnio 3 andares"
+  referenceImage   String?
+  complexityScore  Int?                  // 1-5 calculado
+  source           String    @default("APP") // APP | WHATSAPP_IMPORT | ADMIN_CREATED | INSTAGRAM
+  // Status: DRAFT | SUBMITTED | IN_REVIEW | PROPOSAL_SENT | NEGOTIATING | ACCEPTED | REJECTED | EXPIRED | CONVERTED
+  status           String    @default("SUBMITTED")
+  estimatedTotal   Float                 // cálculo automático inicial
+  notes            String?              // notas internas admin
+
+  // SLA
+  slaDeadline      DateTime?
+  escalatedAt      DateTime?
+
+  // Conversão
+  convertedOrderId String?
+
+  // Cliente
+  customerName     String?
+  customerPhone    String?
+  customerId       String?
+  customer         User?     @relation(fields: [customerId], references: [id])
+
+  // Relações
+  versions         QuotationVersion[]
+  complements      QuotationComplement[]
+  items            QuotationItem[]
+  auditLog         StatusAuditLog[]
+
+  rejectionReason  String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([status])
   @@index([customerId])
   @@index([createdAt])
+  @@index([slaDeadline])
 }
 
+// ─────────────────────────────────────────────
+// QUOTATION VERSION (proposta v1, v2, v3...)
+// ─────────────────────────────────────────────
+model QuotationVersion {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  version     Int
+  price       Float
+  response    String?              // mensagem ao cliente
+  changedBy   String               // ADMIN | CUSTOMER
+  changes     String?              // resumo da alteração
+  // Status: PENDING | ACCEPTED | SUPERSEDED
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+}
+
+// ─────────────────────────────────────────────
+// QUOTATION COMPLEMENT (relacional, não JSON)
+// ─────────────────────────────────────────────
+model QuotationComplement {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  name        String               // "Cupcakes Decorados"
+  type        String               // PER_UNIT | PER_GUEST | FIXED
+  unitPrice   Float
+  quantity    Int       @default(1)
+  subtotal    Float
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+}
+
+// ─────────────────────────────────────────────
+// QUOTATION ITEM (liga Quotation → Product)
+// ─────────────────────────────────────────────
+model QuotationItem {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id])
+  name        String
+  price       Float
+  quantity    Int
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+  @@index([productId])
+}
+
+// ─────────────────────────────────────────────
+// STATUS AUDIT LOG (auditoria de transições)
+// ─────────────────────────────────────────────
+model StatusAuditLog {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id])
+  fromStatus  String
+  toStatus    String
+  changedBy   String               // userId ou "SYSTEM"
+  reason      String?
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// KITCHEN CAPACITY (capacidade diária)
+// ─────────────────────────────────────────────
+model KitchenCapacity {
+  id           String   @id @default(cuid())
+  date         DateTime @unique
+  maxOrders    Int      @default(5)
+  bookedOrders Int      @default(0)
+  // load = bookedOrders / maxOrders
+  createdAt    DateTime @default(now())
+
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────
+// SLA CONFIG (SLA por tipo de evento)
+// ─────────────────────────────────────────────
+model SlaConfig {
+  id            String @id @default(cuid())
+  eventType     String @unique
+  deadlineHours Int    @default(2)
+  businessStart Int    @default(8)  // 08:00
+  businessEnd   Int    @default(20) // 20:00
+}
+
+// ─────────────────────────────────────────────
+// EVENT REMINDER (motor de recompra)
+// ─────────────────────────────────────────────
+model EventReminder {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  eventName     String               // "Aniversário da Sofia"
+  eventType     String
+  eventDate     DateTime
+  nextReminder  DateTime
+  status        String   @default("PENDING") // PENDING | SENT_30D | SENT_7D | SENT_3D | COMPLETED
+  sourceOrderId String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([nextReminder])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// USER (expandido com EventReminder)
+// ─────────────────────────────────────────────
 model User {
-  id         String      @id @default(cuid())
-  email      String      @unique
-  password   String
-  name       String?
-  phone      String?
-  role       String      @default("CUSTOMER") // CUSTOMER, ADMIN
-  avatarUrl  String?
-  address    String?
-  city       String?
+  id           String          @id @default(cuid())
+  email        String          @unique
+  password     String
+  name         String?
+  phone        String?
+  role         String          @default("CUSTOMER") // CUSTOMER, ADMIN
+  avatarUrl    String?
+  address      String?
+  city         String?
   resetToken   String?
   refreshToken String?
   deletedAt    DateTime?
@@ -67,18 +222,22 @@ model User {
   reviews      Review[]
   loyalty      LoyaltyPoints?
   messages     ChatMessage[]
-  createdAt  DateTime    @default(now())
+  reminders    EventReminder[]
+  createdAt    DateTime        @default(now())
 
   @@index([role])
 }
 
+// ─────────────────────────────────────────────
+// ORDER (sem alterações)
+// ─────────────────────────────────────────────
 model Order {
   id        String      @id @default(cuid())
   userId    String
   user      User        @relation(fields: [userId], references: [id])
   items     OrderItem[]
   total     Float
-  status    String      @default("PENDING") // PENDING, COMPLETED, CANCELLED
+  status    String      @default("PENDING")
   feedback  Feedback?
   payments  Payment[]
   deletedAt DateTime?
@@ -91,27 +250,30 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id])
   productId String?
   product   Product? @relation(fields: [productId], references: [id])
-  name      String  // Snapshot of product name
-  price     Float   // Snapshot of price at time of order
+  name      String
+  price     Float
   quantity  Int
 
   @@index([orderId])
   @@index([productId])
 }
 
+// ─────────────────────────────────────────────
+// FEEDBACK, CHAT, REVIEW, PAYMENT, LOYALTY
+// ─────────────────────────────────────────────
 model Feedback {
-  id        String   @id @default(cuid())
-  orderId   String   @unique
-  order     Order    @relation(fields: [orderId], references: [id])
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  rating    Int      // 1-5
-  comment   String?
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  rating     Int      // 1-5
+  comment    String?
   adminReply String?
   repliedAt  DateTime?
   createdAt  DateTime @default(now())
@@ -125,7 +287,7 @@ model ChatMessage {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   text      String
-  sender    String   @default("CUSTOMER") // "CUSTOMER" ou "ADMIN"
+  sender    String   @default("CUSTOMER")
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
@@ -153,11 +315,11 @@ model Payment {
   order         Order    @relation(fields: [orderId], references: [id])
   amount        Float
   method        String   // MULTICAIXA, TRANSFER, CASH
-  status        String   @default("PENDING") // PENDING, PAID, FAILED
+  status        String   @default("PENDING")
   receiptUrl    String?
   transactionId String?
   createdAt     DateTime @default(now())
-  
+
   @@index([orderId])
 }
 
@@ -166,10 +328,9 @@ model LoyaltyPoints {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id])
   points    Int      @default(0)
-  tier      String   @default("BRONZE") // BRONZE, SILVER, GOLD
+  tier      String   @default("BRONZE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([userId])
 }
-
