@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import * as https from 'https';
 import { calculateQuotation } from '@puculuxa/shared';
 import { PdfService } from '../common/pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -151,12 +152,26 @@ export class QuotationService {
 
   // ─── UPDATE STATUS (com guard + auditoria) ───
   async updateStatus(id: string, status: string, changedBy: string, reason?: string) {
-    return this.statusGuard.transition(
+    const updatedQuotation = await this.statusGuard.transition(
       id,
       status as QuotationStatus,
       changedBy,
       reason,
     );
+
+    if (
+      ['PROPOSAL_SENT', 'ACCEPTED', 'REJECTED', 'CONVERTED'].includes(status) &&
+      updatedQuotation.customerId
+    ) {
+      this.sendStatusPushNotification(
+        updatedQuotation.id,
+        status,
+        updatedQuotation.customerId,
+        reason,
+      );
+    }
+
+    return updatedQuotation;
   }
 
   // ─── SEND PROPOSAL (admin envia proposta ao cliente) ───
@@ -194,12 +209,21 @@ export class QuotationService {
       `Proposta v${newVersion.version} enviada: Kz ${dto.price}`,
     );
 
-    // Notificar cliente (futuro: push notification)
+    // Notificar admin (live dashboard)
     this.events.notifyAdmins('proposal_sent', {
       quotationId: id,
       version: newVersion.version,
       price: dto.price,
     });
+
+    // Notificar cliente via Push notification
+    if (quotation.customerId) {
+      this.sendStatusPushNotification(
+        id,
+        QuotationStatus.PROPOSAL_SENT,
+        quotation.customerId,
+      );
+    }
 
     return newVersion;
   }
@@ -276,6 +300,15 @@ export class QuotationService {
 
     this.events.notifyAdmins('quotation_converted', { quotationId: id, orderId: order.id });
 
+    // Notificar cliente via Push notification
+    if (quotation.customerId) {
+      this.sendStatusPushNotification(
+        id,
+        QuotationStatus.CONVERTED,
+        quotation.customerId,
+      );
+    }
+
     // Agendar reminder de recompra para o próximo ano
     if (quotation.customerId && quotation.eventDate) {
       const eventLabel = quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1);
@@ -327,5 +360,116 @@ export class QuotationService {
       create: { date: dateOnly, maxOrders: 5, bookedOrders: 1 },
       update: { bookedOrders: { increment: 1 } },
     });
+  }
+
+  // ─── GET BY CUSTOMER (mobile app) ───
+  async getByCustomer(customerId: string) {
+    return this.prisma.quotation.findMany({
+      where: { customerId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        complements: true,
+        items: true,
+        versions: { orderBy: { version: 'desc' }, take: 1 },
+      },
+    });
+  }
+
+  // ─── PUSH NOTIFICATION NAS TRANSIÇÕES ───
+  private async sendStatusPushNotification(
+    quotationId: string,
+    newStatus: string,
+    customerId: string,
+    rejectionReason?: string,
+  ) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: customerId },
+        select: { pushToken: true },
+      });
+
+      if (!user || !user.pushToken) return;
+
+      const quotation = await this.prisma.quotation.findUnique({
+        where: { id: quotationId },
+        select: { eventType: true },
+      });
+
+      if (!quotation) return;
+
+      let title = '';
+      let body = '';
+
+      switch (newStatus) {
+        case QuotationStatus.PROPOSAL_SENT:
+          title = '📋 Proposta Pronta!';
+          body = `A sua proposta para ${quotation.eventType} está pronta. Abra a app para ver os detalhes e responder.`;
+          break;
+        case QuotationStatus.ACCEPTED:
+          title = '✅ Proposta Aceite!';
+          body = `A proposta para ${quotation.eventType} foi confirmada. Estamos a preparar tudo!`;
+          break;
+        case QuotationStatus.REJECTED:
+          title = 'Orçamento Não Aprovado';
+          body = `O orçamento para ${quotation.eventType} não foi aprovado. ${rejectionReason || 'Contacte-nos para mais informações.'}`;
+          break;
+        case QuotationStatus.CONVERTED:
+          title = '🎉 Encomenda Confirmada!';
+          body = `A encomenda para ${quotation.eventType} está registada! Acompanhe o progresso na app.`;
+          break;
+        default:
+          return;
+      }
+
+      const messagePayload = {
+        to: user.pushToken,
+        sound: 'default',
+        title,
+        body,
+        data: { quotationId, newStatus, screen: 'Tracking' },
+      };
+
+      const data = JSON.stringify(messagePayload);
+      const options = {
+        hostname: 'exp.host',
+        port: 443,
+        path: '/--/api/v2/push/send',
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let responseBody = '';
+        res.on('data', (chunk) => { responseBody += chunk; });
+        res.on('end', async () => {
+          try {
+            const parsed = JSON.parse(responseBody);
+            if (parsed.data && parsed.data.status === 'error' && parsed.data.details?.error === 'DeviceNotRegistered') {
+              await this.prisma.user.update({
+                where: { id: customerId },
+                data: { pushToken: null },
+              });
+              Logger.warn(`[Push] Token removido para user ${customerId} (DeviceNotRegistered)`);
+            }
+          } catch (e) {
+            // Ignorar erro de parse da resposta
+          }
+        });
+      });
+
+      req.on('error', (e) => {
+        Logger.error(`[Push] Falha ao enviar notificação Expo: ${e.message}`);
+      });
+
+      req.write(data);
+      req.end();
+
+    } catch (error: any) {
+      Logger.error(`[Push] Erro inesperado ao tentar enviar push notification: ${error?.message || error}`);
+    }
   }
 }

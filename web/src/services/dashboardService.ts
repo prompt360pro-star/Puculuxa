@@ -98,3 +98,56 @@ export const DashboardService = {
         return data.orders;
     }
 };
+
+export interface DashboardRealData {
+    kpis: {
+        totalQuotations: number;
+        thisMonth: number;
+        monthOverMonth: string | null;
+        conversionRate: string;
+        revenueThisMonth: number;
+        revenueGrowth: string | null;
+        avgResponseHours: string;
+    };
+    funnel: {
+        submitted: number;
+        inReview: number;
+        proposalSent: number;
+        negotiating: number;
+        accepted: number;
+        converted: number;
+        rejected: number;
+        expired: number;
+    };
+    actionItems: {
+        expiringIn24h: Array<{
+            id: string;
+            eventType: string;
+            slaDeadline: string;
+            status: string;
+            customerName: string | null;
+        }>;
+        slaBreached: Array<{
+            id: string;
+            eventType: string;
+            slaDeadline: string;
+            customerName: string | null;
+        }>;
+        pendingReview: number;
+        awaitingResponse: number;
+    };
+}
+
+export async function getDashboardData(token?: string): Promise<DashboardRealData> {
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('puculuxa_token') : null);
+
+    const response = await fetch(`${BASE_URL}/analytics/dashboard`, {
+        headers: {
+            'Authorization': `Bearer ${authToken}`
+        },
+        cache: 'no-store'
+    });
+
+    if (!response.ok) throw new Error('Falha ao carregar live analytics do dashboard');
+    return await response.json();
+}

@@ -9,23 +9,15 @@ import {
     Target,
     BarChart3,
     FileText,
-    ChefHat
+    ChefHat,
+    Clock
 } from 'lucide-react';
-import { DashboardService, DashboardStats, RecentOrder } from '@/services/dashboardService';
+import { DashboardService, DashboardStats, RecentOrder, getDashboardData, DashboardRealData } from '@/services/dashboardService';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import dynamic from 'next/dynamic';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const DashboardHeader = dynamic(() => import('@/components/DashboardHeader').then((mod) => mod.DashboardHeader as any), {
-    loading: () => <div className="h-20 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-2xl mb-8"></div>
-});
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SmartInbox = dynamic(() => import('@/components/SmartInbox').then((mod) => mod.SmartInbox as any), {
-    loading: () => <div className="h-64 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-3xl"></div>
-});
+import { DashboardHeader } from '@/components/DashboardHeader';
+import { SmartInbox } from '@/components/SmartInbox';
 
 import { cookies } from 'next/headers';
 
@@ -35,22 +27,31 @@ export default async function DashboardPage() {
 
     let stats: DashboardStats | null = null;
     let orders: RecentOrder[] = [];
+    let liveData: DashboardRealData | null = null;
 
     try {
-        const dashboardData = await DashboardService.getAll(token);
-        stats = dashboardData.stats;
-        orders = dashboardData.orders;
+        // Parallel requests
+        const [dashboardLegacy, liveDataRes] = await Promise.all([
+            DashboardService.getAll(token),
+            getDashboardData(token)
+        ]);
+        stats = dashboardLegacy.stats;
+        orders = dashboardLegacy.orders;
+        liveData = liveDataRes;
     } catch (error) {
         console.error("Failed to load dashboard data:", error);
     }
 
-    if (!stats) {
+    if (!stats || !liveData) {
         return (
             <div className="p-8 flex items-center justify-center h-[50vh]">
                 <p className="text-text-secondary">Erro ao carregar dados do dashboard. Verifique sua conexão.</p>
             </div>
         );
     }
+
+    const formatCurrency = (val: number) => `Kz ${val.toLocaleString('pt-BR')}`;
+    const momBadgeColor = liveData.kpis.monthOverMonth?.startsWith('+') ? 'text-green-500 border-green-500/20 bg-green-500/10' : 'text-red-500 border-red-500/20 bg-red-500/10';
 
     return (
         <div className="p-8 space-y-10 animate-fade-in-up transition-colors duration-300">
@@ -61,51 +62,54 @@ export default async function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
                 {/* Cartão de Vendas (Grande) — links para Stats */}
-                <Link href="/dashboard/stats" className="col-span-1 md:col-span-2 p-8 border-l-4 border-l-puculuxa-orange bg-bg-card hover:bg-white dark:hover:bg-slate-800/80 hover:shadow-2xl hover:shadow-puculuxa-orange/20 transition-all group duration-500 rounded-2xl block border border-border-main cursor-pointer">
-                    <div className="flex items-center justify-between mb-8">
+                <Link href="/dashboard/stats" className="col-span-1 md:col-span-2 p-8 border-l-4 border-l-puculuxa-orange bg-bg-card hover:bg-white dark:hover:bg-slate-800/80 hover:shadow-2xl hover:shadow-puculuxa-orange/20 transition-all group duration-500 rounded-2xl block border border-border-main cursor-pointer relative overflow-hidden">
+                    <div className="absolute -right-10 -top-10 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity duration-1000 rotate-12">
+                        <Target size={240} />
+                    </div>
+                    <div className="flex items-center justify-between mb-8 relative z-10">
                         <div className="p-4 bg-gradient-to-br from-puculuxa-orange/20 to-puculuxa-gold/20 text-puculuxa-orange rounded-[2rem] group-hover:scale-110 shadow-sm transition-transform duration-500">
                             <Target size={32} strokeWidth={2.5} />
                         </div>
-                        <Badge variant="success" className="bg-gradient-to-r from-green-500/10 to-green-400/10 text-green-500 border-green-500/20 px-4 py-1">
-                            🚀 {stats.conversionRate} sobre a meta
-                        </Badge>
+                        {liveData.kpis.revenueGrowth && (
+                            <Badge variant="success" className={`px-4 py-1 flex items-center gap-1 ${liveData.kpis.revenueGrowth.startsWith('+') ? 'bg-gradient-to-r from-green-500/10 to-green-400/10 text-green-500 border-green-500/20' : 'bg-gradient-to-r from-red-500/10 to-red-400/10 text-red-500 border-red-500/20'}`}>
+                                <TrendingUp size={14} /> {liveData.kpis.revenueGrowth} vs mês anterior
+                            </Badge>
+                        )}
                     </div>
-                    <div>
+                    <div className="relative z-10">
                         <p className="text-text-secondary font-bold text-xs tracking-[0.2em] uppercase">Receita Bruta Mensal</p>
-                        <h3 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-text-primary to-text-secondary mt-2 tracking-tighter">{stats.revenue}</h3>
+                        <h3 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-text-primary to-text-secondary mt-2 tracking-tighter">{formatCurrency(liveData.kpis.revenueThisMonth)}</h3>
                     </div>
-                    <div className="mt-8 h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="mt-8 h-2.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative z-10">
                         <div className="h-full bg-gradient-to-r from-puculuxa-orange to-puculuxa-gold w-[82%] rounded-full shadow-glow" />
                     </div>
-                    <p className="text-[11px] text-text-secondary mt-4 font-bold flex items-center gap-2">
-                        <TrendingUp size={16} className="text-puculuxa-olive" />
-                        PREVISÃO DE FECHAMENTO: Kz 165.000
+                    <p className="relative z-10 text-[11px] text-text-secondary mt-4 font-bold flex items-center gap-2 uppercase">
+                        ⭐ Converção Média de {liveData.kpis.conversionRate}
                     </p>
                 </Link>
 
-                {/* Cartão de Satisfação — links para Reviews */}
-                <Link href="/dashboard/reviews" className="col-span-1 p-8 border-l-4 border-l-puculuxa-olive bg-bg-card hover:bg-white dark:hover:bg-slate-800/80 hover:shadow-2xl hover:shadow-puculuxa-olive/20 transition-all group duration-500 rounded-2xl block border border-border-main cursor-pointer">
-                    <div className="flex items-center justify-between mb-8">
+                {/* Tempo Médio de Resposta (Substituindo o antigo de reviews para focar no SLA real da Puculuxa) */}
+                <div className="col-span-1 p-8 border-l-4 border-l-puculuxa-olive bg-bg-card hover:bg-white dark:hover:bg-slate-800/80 hover:shadow-2xl hover:shadow-puculuxa-olive/20 transition-all group duration-500 rounded-2xl block border border-border-main cursor-pointer relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-8 relative z-10">
                         <div className="p-4 bg-gradient-to-br from-puculuxa-olive/20 to-green-500/10 text-puculuxa-olive rounded-[2rem] group-hover:scale-110 shadow-sm transition-transform duration-500">
-                            <Users size={28} strokeWidth={2.5} />
+                            <Clock size={28} strokeWidth={2.5} />
                         </div>
                     </div>
-                    <p className="text-text-secondary font-bold text-xs uppercase tracking-widest leading-none">NPS Score</p>
-                    <div className="flex items-baseline gap-2 mt-4">
-                        <h3 className="text-5xl font-black text-text-primary tracking-tighter">{stats.averageRating}</h3>
-                        <span className="text-xl text-text-secondary font-bold">/ 5.0</span>
+                    <p className="text-text-secondary font-bold text-xs uppercase tracking-widest leading-none relative z-10">SLA Médio de Proposta</p>
+                    <div className="flex items-baseline gap-2 mt-4 relative z-10">
+                        <h3 className="text-5xl font-black text-text-primary tracking-tighter">{liveData.kpis.avgResponseHours}</h3>
+                        <span className="text-xl text-text-secondary font-bold">hrs</span>
                     </div>
-                    <div className="mt-8 flex gap-1.5 items-end h-10 w-full opacity-80 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-8 flex gap-1.5 items-end h-10 w-full opacity-80 group-hover:opacity-100 transition-opacity relative z-10">
                         {[4, 6, 8, 5, 9, 7, 10].map((h, i) => {
                             const heightMap: { [key: number]: string } = { 4: 'h-[40%]', 6: 'h-[60%]', 8: 'h-[80%]', 5: 'h-[50%]', 9: 'h-[90%]', 7: 'h-[70%]', 10: 'h-[100%]' };
                             return <div key={i} className={`flex-1 bg-gradient-to-t from-puculuxa-olive/20 to-puculuxa-olive/40 rounded-t-md group-hover:from-puculuxa-olive/40 group-hover:to-puculuxa-olive transition-all duration-500 ${heightMap[h]} delay-${i * 75}`} />;
                         })}
                     </div>
-                    <p className="text-[11px] text-text-secondary mt-4 font-bold flex items-center gap-2 uppercase tracking-widest leading-none">
-                        <Star size={14} fill="currentColor" className="text-puculuxa-gold animate-pulse-soft" />
-                        {stats.feedbacks} Avaliações
+                    <p className="text-[11px] text-text-secondary mt-4 font-bold flex items-center gap-2 uppercase tracking-widest leading-none relative z-10">
+                        Tempo desde a submissão até ao envio real
                     </p>
-                </Link>
+                </div>
 
                 {/* Cartões Pequenos Empilhados */}
                 <div className="col-span-1 flex flex-col gap-6">
@@ -115,8 +119,13 @@ export default async function DashboardPage() {
                                 <FileText size={24} />
                             </div>
                             <div>
-                                <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Novos Orçamentos</p>
-                                <h4 className="text-3xl font-black text-text-primary tracking-tight mt-1">{stats.newQuotes}</h4>
+                                <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Orçamentos Mês</p>
+                                <div className="flex items-baseline gap-2 mt-1">
+                                    <h4 className="text-3xl font-black text-text-primary tracking-tight">{liveData.kpis.thisMonth}</h4>
+                                    {liveData.kpis.monthOverMonth && (
+                                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${momBadgeColor}`}>{liveData.kpis.monthOverMonth}</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </Link>
@@ -127,8 +136,8 @@ export default async function DashboardPage() {
                                 <ChefHat size={24} />
                             </div>
                             <div>
-                                <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Em Produção</p>
-                                <h4 className="text-3xl font-black text-text-primary tracking-tight mt-1">{stats.inProduction}</h4>
+                                <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Em Produção / Aceites</p>
+                                <h4 className="text-3xl font-black text-text-primary tracking-tight mt-1">{liveData.funnel.accepted + liveData.funnel.converted}</h4>
                             </div>
                         </div>
                     </Link>
@@ -138,7 +147,7 @@ export default async function DashboardPage() {
             {/* 2. Alertas e Ações Prioritárias */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2">
-                    <SmartInbox />
+                    <SmartInbox actionItems={liveData.actionItems} />
                 </div>
 
                 {/* 3. Projeções e Riscos */}
@@ -150,25 +159,31 @@ export default async function DashboardPage() {
                         <div className="relative z-10 h-full flex flex-col">
                             <div className="flex items-center gap-2 text-puculuxa-gold font-black text-[10px] tracking-widest uppercase mb-4">
                                 <Zap size={14} fill="currentColor" />
-                                Previsão de Demanda
+                                Visão da Fila Geral
                             </div>
-                            <h3 className="text-2xl font-black mb-2 leading-tight">Pico em 15 de Jan</h3>
-                            <p className="text-slate-400 font-medium mb-8 text-sm leading-relaxed">
-                                Demanda prevista em **+20%**. Ação recomendada: reforçar estoque de insumos críticos.
-                            </p>
+                            <h3 className="text-2xl font-black mb-2 leading-tight">Funil em Curso</h3>
 
-                            <div className="space-y-4 mb-8 mt-auto">
-                                <div className="flex items-center justify-between text-xs">
-                                    <span className="text-slate-400 font-bold uppercase tracking-widest">Capacidade Operacional</span>
-                                    <span className="font-mono text-puculuxa-gold">92% (CRÍTICA)</span>
+                            <div className="space-y-4 mb-8 mt-4 flex-1">
+                                <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
+                                    <span className="text-slate-300">Novos (Submitted)</span>
+                                    <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded">{liveData.funnel.submitted}</span>
                                 </div>
-                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                    <div className="h-full bg-red-500 w-[92%] rounded-full shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
+                                <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
+                                    <span className="text-slate-300">Em Análise (In Review)</span>
+                                    <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded">{liveData.funnel.inReview}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm border-b border-white/10 pb-2">
+                                    <span className="text-slate-300">Aguardam Cliente (Proposal)</span>
+                                    <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded">{liveData.funnel.proposalSent}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm pb-2">
+                                    <span className="text-slate-300">Em Negociação</span>
+                                    <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded">{liveData.funnel.negotiating}</span>
                                 </div>
                             </div>
 
                             <Button className="w-full bg-white text-slate-900 hover:bg-puculuxa-gold border-0 h-12 font-black tracking-widest uppercase text-xs">
-                                REOTIMIZAR ESCALA
+                                EXPORTAR DADOS
                             </Button>
                         </div>
                     </Card>
@@ -212,4 +227,3 @@ export default async function DashboardPage() {
         </div>
     );
 }
-

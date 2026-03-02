@@ -184,6 +184,12 @@ export const ApiService = {
         return result.data || result;
     },
 
+    async getMyQuotations() {
+        const response = await fetchWithAuth(`${BASE_URL}/quotations/my`);
+        if (!response.ok) throw new Error('Falha ao buscar orçamentos em curso');
+        return await response.json();
+    },
+
     async getMyOrders() {
         const response = await fetchWithAuth(`${BASE_URL}/orders/my`);
         if (!response.ok) throw new Error('Falha ao buscar histórico de pedidos');

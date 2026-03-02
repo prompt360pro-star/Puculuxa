@@ -1,15 +1,193 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ChevronLeft, CheckCircle, Package, Truck, Home } from 'lucide-react-native';
+import { ChevronLeft, CheckCircle, Package, Truck, Home, CreditCard } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
+import { ApiService } from '../services/api';
 import { Theme, T } from '../theme';
+import { formatKz, formatDateAO } from '../utils/errorMessages';
+import { PremiumButton } from '../components/ui/PremiumButton';
+import { Skeleton } from '../components/ui/Skeleton';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+// Status config for Quotations
+const QUOTATION_STATUS_CONFIG = {
+    SUBMITTED: { label: 'Enviado', icon: 'paper-plane', color: '#3B82F6', step: 1, desc: 'O seu pedido foi enviado com sucesso.' },
+    IN_REVIEW: { label: 'Em Análise', icon: 'eye', color: '#F59E0B', step: 2, desc: 'A nossa equipa está a analisar a viabilidade.' },
+    PROPOSAL_SENT: { label: 'Proposta Pronta', icon: 'document-text', color: '#8B5CF6', step: 3, desc: 'Reveja a proposta e diga-nos o que achou.' },
+    NEGOTIATING: { label: 'Em Negociação', icon: 'chatbubbles', color: '#EC4899', step: 3, desc: 'A justar os detalhes conforme o seu feedback.' },
+    ACCEPTED: { label: 'Aceite', icon: 'checkmark-circle', color: '#10B981', step: 4, desc: 'Tudo acordado! Vamos avançar para a encomenda.' },
+    CONVERTED: { label: 'Encomenda Criada', icon: 'cube', color: Theme.colors.success, step: 5, desc: 'Foi gerado o seu pedido final. Acompanhe a entrega.' },
+};
+
+const QUOTATION_TIMELINE = [
+    { key: 'SUBMITTED' },
+    { key: 'IN_REVIEW' },
+    { key: 'PROPOSAL_SENT' },
+    { key: 'ACCEPTED' },
+    { key: 'CONVERTED' },
+];
 
 export const OrderTrackingScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { orderId } = route.params || { orderId: 'ORD-12345' };
+    const { orderId, quotationId, type } = route.params || {};
 
-    const steps = [
+    const isQuotation = type === 'quotation';
+
+    // Se for Orçamento, buscamos a lista de quotations da cache ou API e filtramos
+    const { data: quotations = [], isLoading: loadingQuotations } = useQuery({
+        queryKey: ['myQuotations'],
+        queryFn: () => ApiService.getMyQuotations(),
+        enabled: isQuotation,
+    });
+
+    const quotation = useMemo(() => {
+        if (!isQuotation) return null;
+        return quotations.find(q => q.id === quotationId);
+    }, [quotations, quotationId, isQuotation]);
+
+    // Animação para a badge "Aguarda Confirmação"
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (isQuotation && quotation?.status === 'ACCEPTED') {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, { toValue: 0.6, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true })
+                ])
+            ).start();
+        }
+    }, [isQuotation, quotation?.status]);
+
+    if (isQuotation) {
+        if (loadingQuotations || !quotation) {
+            return (
+                <View style={styles.container}>
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
+                            <ChevronLeft size={22} color={Theme.colors.white} />
+                        </TouchableOpacity>
+                        <Text style={styles.title}>Rastreio de Orçamento</Text>
+                        <View style={{ width: 40 }} />
+                    </View>
+                    <View style={{ padding: 20, gap: 16 }}>
+                        <Skeleton width="100%" height={100} borderRadius={16} />
+                        <Skeleton width="100%" height={300} borderRadius={16} />
+                    </View>
+                </View>
+            );
+        }
+
+        const config = QUOTATION_STATUS_CONFIG[quotation.status] || QUOTATION_STATUS_CONFIG.SUBMITTED;
+        const currentStep = config.step;
+        const displayPrice = quotation.versions?.length > 0 ? quotation.versions[0].price : quotation.estimatedTotal;
+
+        return (
+            <View style={styles.container}>
+                <View style={styles.header}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
+                        <ChevronLeft size={22} color={Theme.colors.white} />
+                    </TouchableOpacity>
+                    <Text style={styles.title}>Rastreio</Text>
+                    <View style={{ width: 40 }} />
+                </View>
+
+                <ScrollView contentContainerStyle={styles.content}>
+                    <View style={styles.metaCard}>
+                        <Text style={styles.metaTitle}>{quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1)}</Text>
+                        <View style={styles.metaRow}>
+                            <Text style={styles.metaLabel}>Data do Evento:</Text>
+                            <Text style={styles.metaValue}>{quotation.eventDate ? formatDateAO(quotation.eventDate) : 'A definir'}</Text>
+                        </View>
+                        <View style={styles.metaRow}>
+                            <Text style={styles.metaLabel}>Convidados:</Text>
+                            <Text style={styles.metaValue}>{quotation.guestCount}</Text>
+                        </View>
+                        {quotation.complements?.length > 0 && (
+                            <View style={styles.metaRow}>
+                                <Text style={styles.metaLabel}>Complementos:</Text>
+                                <Text style={styles.metaValue}>{quotation.complements.map(c => c.name).join(', ')}</Text>
+                            </View>
+                        )}
+                        <View style={[styles.metaRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#2A2A2A' }]}>
+                            <Text style={[styles.metaLabel, { fontSize: 16 }]}>Orçamento (Aprox.):</Text>
+                            <Text style={styles.metaPrice}>{formatKz(displayPrice)}</Text>
+                        </View>
+                    </View>
+
+                    {quotation.status === 'PROPOSAL_SENT' && (
+                        <View style={{ marginBottom: 24 }}>
+                            <PremiumButton
+                                title="Ver Proposta"
+                                size="md"
+                                style={{ backgroundColor: '#10B981', borderColor: '#059669' }}
+                            />
+                        </View>
+                    )}
+
+                    {quotation.status === 'ACCEPTED' && (
+                        <Animated.View style={[styles.pulseBadge, { opacity: pulseAnim }]}>
+                            <Ionicons name="alert-circle" size={20} color="#F59E0B" style={{ marginRight: 8 }} />
+                            <Text style={styles.pulseText}>Aguarda Confirmação Final</Text>
+                        </Animated.View>
+                    )}
+
+                    <Text style={styles.sectionTitle}>Progresso</Text>
+
+                    <View style={styles.timeline}>
+                        {QUOTATION_TIMELINE.map((item, index) => {
+                            const stepCfg = QUOTATION_STATUS_CONFIG[item.key];
+                            // Se há versão NEGOTIATING a substituir PROPOSAL_SENT
+                            let activeCfg = stepCfg;
+                            if (item.key === 'PROPOSAL_SENT' && quotation.status === 'NEGOTIATING') {
+                                activeCfg = QUOTATION_STATUS_CONFIG.NEGOTIATING;
+                            }
+
+                            const isCompleted = activeCfg.step < currentStep;
+                            const isCurrent = activeCfg.step === currentStep;
+                            const isFuture = activeCfg.step > currentStep;
+                            const isLast = index === QUOTATION_TIMELINE.length - 1;
+
+                            return (
+                                <View key={item.key} style={styles.stepContainer}>
+                                    <View style={styles.stepLeft}>
+                                        <View style={[
+                                            styles.iconBox,
+                                            isFuture ? styles.iconBoxFuture : { backgroundColor: `${activeCfg.color}20` },
+                                            isCurrent && { borderWidth: 1, borderColor: activeCfg.color }
+                                        ]}>
+                                            <Ionicons
+                                                name={activeCfg.icon}
+                                                size={18}
+                                                color={isFuture ? '#6B7280' : activeCfg.color}
+                                            />
+                                        </View>
+                                        {!isLast && <View style={[styles.timelineLine, isCompleted ? { backgroundColor: activeCfg.color } : { backgroundColor: '#2A2A2A' }]} />}
+                                    </View>
+                                    <View style={styles.stepRight}>
+                                        <Text style={[styles.stepTitle, (isCompleted || isCurrent) ? { color: '#FFFFFF' } : { color: '#6B7280' }]}>
+                                            {activeCfg.label}
+                                        </Text>
+                                        <Text style={[styles.stepDesc, (isCompleted || isCurrent) ? { color: '#9CA3AF' } : { color: '#4B5563' }]}>
+                                            {activeCfg.desc}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </ScrollView>
+            </View>
+        );
+    }
+
+    // Fallback: Fluxo de Encomendas Normal (type === 'order')
+    // Placeholder estático do histórico existente
+    const orderSteps = [
         { id: 1, title: 'Pedido Confirmado', time: '10:00', icon: CheckCircle, completed: true },
         { id: 2, title: 'Em Preparação', time: '10:15', icon: Package, completed: true },
         { id: 3, title: 'A Caminho', time: '11:30', icon: Truck, completed: false },
@@ -20,38 +198,40 @@ export const OrderTrackingScreen = () => {
         <View style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                    <ChevronLeft size={22} color={Theme.colors.primary} />
+                    <ChevronLeft size={22} color={Theme.colors.white} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Rastreio</Text>
+                <Text style={styles.title}>Rastreio da Encomenda</Text>
                 <View style={{ width: 40 }} />
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
-                <View style={styles.orderMeta}>
-                    <Text style={styles.orderIdTitle}>Encomenda #{orderId}</Text>
-                    <Text style={styles.orderEta}>Entrega Estimada: Hoje, 12:00</Text>
+                <View style={[styles.metaCard, { borderColor: '#2A2A2A', borderWidth: 1 }]}>
+                    <Text style={styles.metaTitle}>Encomenda #{orderId}</Text>
+                    <Text style={[styles.metaValue, { color: Theme.colors.success, fontFamily: 'Poppins_600SemiBold', marginTop: 4 }]}>
+                        Entrega Estimada: Hoje, 12:00
+                    </Text>
                 </View>
 
                 <View style={styles.timeline}>
-                    {steps.map((step, index) => {
+                    {orderSteps.map((step, index) => {
                         const Icon = step.icon;
-                        const isLast = index === steps.length - 1;
+                        const isLast = index === orderSteps.length - 1;
                         return (
                             <View key={step.id} style={styles.stepContainer}>
                                 <View style={styles.stepLeft}>
-                                    <View style={[styles.iconBox, step.completed ? styles.iconBoxActive : styles.iconBoxInactive]}>
-                                        <Icon size={18} color={step.completed ? Theme.colors.white : Theme.colors.textTertiary} />
+                                    <View style={[styles.iconBox, step.completed ? { backgroundColor: Theme.colors.primary } : styles.iconBoxFuture]}>
+                                        <Icon size={18} color={step.completed ? '#FFFFFF' : '#6B7280'} />
                                     </View>
-                                    {!isLast ? <View style={[styles.line, step.completed ? styles.lineActive : styles.lineInactive]} /> : null}
+                                    {!isLast && <View style={[styles.timelineLine, step.completed ? { backgroundColor: Theme.colors.primary } : { backgroundColor: '#2A2A2A' }]} />}
                                 </View>
                                 <View style={styles.stepRight}>
-                                    <View style={styles.stepInfo}>
-                                        <Text style={[styles.stepTitle, step.completed ? styles.stepTitleActive : null]}>{step.title}</Text>
-                                        <Text style={styles.stepTime}>{step.time}</Text>
+                                    <View style={styles.stepInfoRow}>
+                                        <Text style={[styles.stepTitle, step.completed ? { color: '#FFFFFF' } : { color: '#6B7280' }]}>{step.title}</Text>
+                                        <Text style={{ fontSize: 12, color: '#9CA3AF' }}>{step.time}</Text>
                                     </View>
-                                    {step.id === 3 && !step.completed ? (
-                                        <Text style={styles.stepDesc}>O estafeta está a caminho do destino.</Text>
-                                    ) : null}
+                                    {step.id === 3 && !step.completed && (
+                                        <Text style={[styles.stepDesc, { color: '#9CA3AF' }]}>O estafeta está a caminho do destino.</Text>
+                                    )}
                                 </View>
                             </View>
                         );
@@ -63,34 +243,39 @@ export const OrderTrackingScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: Theme.colors.background },
+    container: { flex: 1, backgroundColor: '#0F0F0F' },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14,
-        backgroundColor: Theme.colors.surfaceElevated, borderBottomWidth: 1, borderBottomColor: Theme.colors.border,
+        paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16,
+        backgroundColor: '#1A1A1A', borderBottomWidth: 1, borderBottomColor: '#2A2A2A',
     },
-    backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Theme.colors.surface, justifyContent: 'center', alignItems: 'center' },
-    title: { ...T.h3, color: Theme.colors.primary },
+    backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#2A2A2A', justifyContent: 'center', alignItems: 'center' },
+    title: { ...T.h3, color: Theme.colors.white },
     content: { padding: 20 },
-    orderMeta: {
-        backgroundColor: Theme.colors.surfaceElevated, padding: 20, borderRadius: Theme.radius.lg,
-        marginBottom: 24, ...Theme.elevation.sm, alignItems: 'center',
+
+    metaCard: {
+        backgroundColor: '#1A1A1A', padding: 20, borderRadius: 16,
+        marginBottom: 24, borderWidth: 1, borderColor: '#2A2A2A'
     },
-    orderIdTitle: { fontFamily: 'Merriweather_700Bold', fontSize: 18, color: Theme.colors.textPrimary, marginBottom: 4 },
-    orderEta: { ...T.body, color: Theme.colors.primary, fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
+    metaTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: '#FFFFFF', marginBottom: 12 },
+    metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-start' },
+    metaLabel: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: '#9CA3AF', flex: 1 },
+    metaValue: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: '#FFFFFF', flex: 1, textAlign: 'right' },
+    metaPrice: { fontFamily: 'Poppins_700Bold', fontSize: 22, color: '#DC2626' },
+
+    sectionTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: '#FFFFFF', marginBottom: 16 },
+
+    pulseBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#F59E0B' },
+    pulseText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#D97706' },
+
     timeline: { paddingLeft: 8 },
     stepContainer: { flexDirection: 'row', minHeight: 80 },
     stepLeft: { alignItems: 'center', width: 40, marginRight: 16 },
     iconBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    iconBoxActive: { backgroundColor: Theme.colors.primary },
-    iconBoxInactive: { backgroundColor: Theme.colors.border },
-    line: { width: 2, flex: 1, marginVertical: 4 },
-    lineActive: { backgroundColor: Theme.colors.primary },
-    lineInactive: { backgroundColor: Theme.colors.border },
+    iconBoxFuture: { backgroundColor: '#1F2937' },
+    timelineLine: { width: 2, flex: 1, marginVertical: 4 },
     stepRight: { flex: 1, paddingTop: 8 },
-    stepInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    stepTitle: { ...T.body, fontFamily: 'Poppins_500Medium', color: Theme.colors.textTertiary },
-    stepTitleActive: { color: Theme.colors.textPrimary, fontFamily: 'Poppins_600SemiBold' },
-    stepTime: { ...T.bodySmall },
-    stepDesc: { ...T.bodySmall, fontStyle: 'italic', marginTop: 4 },
+    stepInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    stepTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 15 },
+    stepDesc: { fontFamily: 'Poppins_400Regular', fontSize: 13, marginTop: 4, lineHeight: 18 },
 });

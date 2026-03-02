@@ -141,7 +141,9 @@ export default function App() {
     // Push notifications: init after auth, sync token with backend
     useEffect(() => {
         if (isAuthenticated) {
-            initPushNotifications().catch(() => { });
+            initPushNotifications().catch((e) =>
+                console.log('[Push] Init skipped:', e.message)
+            );
             clearBadge().catch(() => { });
         }
     }, [isAuthenticated]);

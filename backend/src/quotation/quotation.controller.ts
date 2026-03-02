@@ -75,6 +75,14 @@ export class QuotationController {
     return this.quotationService.getBlockedDates();
   }
 
+  // ─── Meus Orçamentos (Mobile) ───
+  @UseGuards(JwtAuthGuard)
+  @Get('my')
+  getMyQuotations(@Req() req: Request) {
+    const userId = (req as any).user?.id || (req as any).user?.sub;
+    return this.quotationService.getByCustomer(userId);
+  }
+
   // ─── Detalhe (Admin) ───
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

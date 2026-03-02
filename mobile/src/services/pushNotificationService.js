@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { apiClient } from '../config/api.config';
 
 const PUSH_TOKEN_KEY = '@puculuxa:push_token';
@@ -27,7 +28,12 @@ Notifications.setNotificationHandler({
 });
 
 // ─── Registar permissões e obter Push Token ───
-export async function registerForPushNotificationsAsync(): Promise<string | null> {
+export async function registerForPushNotificationsAsync() {
+    if (Constants.appOwnership === 'expo') {
+        console.log('[Push] Skipping push registration in Expo Go');
+        return null;
+    }
+
     if (!Device.isDevice) {
         console.warn('[Push] Notificações apenas funcionam em dispositivo real.');
         return null;
@@ -78,7 +84,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 }
 
 // ─── Enviar token ao backend para registo ───
-export async function syncPushTokenWithBackend(token: string): Promise<void> {
+export async function syncPushTokenWithBackend(token) {
     try {
         await apiClient.post('/auth/push-token', { token });
         console.log('[Push] Token sincronizado com backend:', token.substring(0, 20) + '...');
@@ -88,7 +94,12 @@ export async function syncPushTokenWithBackend(token: string): Promise<void> {
 }
 
 // ─── Inicializar tudo (chamar no App.js / root layout) ───
-export async function initPushNotifications(): Promise<void> {
+export async function initPushNotifications() {
+    if (Constants.appOwnership === 'expo') {
+        console.log('[Push] Expo Go detectado — push notifications desactivadas. Usa development build para testar push.');
+        return;
+    }
+
     const token = await registerForPushNotificationsAsync();
     if (token) {
         await syncPushTokenWithBackend(token);
@@ -96,30 +107,22 @@ export async function initPushNotifications(): Promise<void> {
 }
 
 // ─── Listener de notificação recebida (foreground) ───
-export function addNotificationReceivedListener(
-    handler: (notification: Notifications.Notification) => void
-) {
+export function addNotificationReceivedListener(handler) {
     return Notifications.addNotificationReceivedListener(handler);
 }
 
 // ─── Listener de resposta (utilizador tocou na notificação) ───
-export function addNotificationResponseListener(
-    handler: (response: Notifications.NotificationResponse) => void
-) {
+export function addNotificationResponseListener(handler) {
     return Notifications.addNotificationResponseReceivedListener(handler);
 }
 
 // ─── Limpar badge ───
-export async function clearBadge(): Promise<void> {
+export async function clearBadge() {
     await Notifications.setBadgeCountAsync(0);
 }
 
 // ─── Agendar notificação local (teste / fallback) ───
-export async function scheduleLocalNotification(
-    title: string,
-    body: string,
-    secondsFromNow = 5
-): Promise<void> {
+export async function scheduleLocalNotification(title, body, secondsFromNow = 5) {
     await Notifications.scheduleNotificationAsync({
         content: { title, body, sound: 'default', color: '#F97316' },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsFromNow },
