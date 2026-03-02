@@ -19,43 +19,51 @@ import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
 
-// Event types with visual cards
+// Event types with visual cards (8 tipos — match schema v3.1)
 const EVENT_TYPES = [
     { id: 'aniversario', label: 'Aniversário', icon: '🎂', color: '#FFE0B2' },
     { id: 'casamento', label: 'Casamento', icon: '💒', color: '#F8BBD0' },
     { id: 'corporativo', label: 'Corporativo', icon: '🏢', color: '#BBDEFB' },
-    { id: 'batizado', label: 'Batizado', icon: '⛪', color: '#C8E6C9' },
-    { id: 'formatura', label: 'Formatura', icon: '🎓', color: '#D1C4E9' },
-    { id: 'cha_bebe', label: 'Chá de Bebé', icon: '👶', color: '#B3E5FC' },
+    { id: 'baptizado', label: 'Baptizado', icon: '⛪', color: '#C8E6C9' },
+    { id: 'bodas', label: 'Bodas', icon: '💍', color: '#E1BEE7' },
+    { id: 'baby_shower', label: 'Baby Shower', icon: '👶', color: '#B3E5FC' },
+    { id: 'graduacao', label: 'Graduação', icon: '🎓', color: '#D1C4E9' },
+    { id: 'outro', label: 'Outro', icon: '📋', color: '#CFD8DC' },
 ];
 
-// Complements — preços em Kz
+// Complements — preços em Kz (match shared COMPLEMENTS catalog)
 const COMPLEMENTS = [
-    { id: 'cupcakes', label: 'Cupcakes Decorados', price: 12000, icon: '🧁' },
-    { id: 'doces', label: 'Mesa de Doces Finos', price: 25000, icon: '🍬' },
-    { id: 'salgados', label: 'Kit Salgados Premium', price: 45000, icon: '🥟' },
-    { id: 'bebidas', label: 'Bebidas Tropicais', price: 20000, icon: '🍹' },
-    { id: 'decoracao', label: 'Decoração Temática', price: 35000, icon: '🎈' },
+    { id: 'cupcakes', label: 'Cupcakes Decorados', price: 1500, type: 'PER_UNIT', icon: '🧁' },
+    { id: 'docinhos', label: 'Mesa de Docinhos', price: 800, type: 'PER_GUEST', icon: '🍬' },
+    { id: 'salgados', label: 'Salgados Premium', price: 900, type: 'PER_GUEST', icon: '🥟' },
+    { id: 'drinks', label: 'Serviço de Bebidas', price: 1000, type: 'PER_GUEST', icon: '🍹' },
+    { id: 'decoration', label: 'Decoração Temática', price: 25000, type: 'FIXED', icon: '🎈' },
+    { id: 'coffee_break', label: 'Coffee Break', price: 1200, type: 'PER_GUEST', icon: '☕' },
+    { id: 'lembrancinhas', label: 'Lembrancinhas', price: 500, type: 'PER_GUEST', icon: '🎁' },
 ];
 
-// Base prices by event type (per guest, in Kz)
+// Base prices by event type (per guest, in Kz — match shared BASE_PRICES)
 const BASE_PRICE_PER_GUEST = {
-    aniversario: 3500,
-    casamento: 5500,
-    corporativo: 6000,
-    batizado: 4000,
-    formatura: 4500,
-    cha_bebe: 3500,
+    casamento: 2500,
+    aniversario: 2000,
+    corporativo: 3000,
+    baptizado: 1800,
+    bodas: 2200,
+    baby_shower: 1500,
+    graduacao: 1800,
+    outro: 2000,
 };
 
-// Suggestions per event type
+// Suggestions per event type (match shared EVENT_SUGGESTIONS)
 const SUGGESTIONS = {
-    aniversario: ['cupcakes', 'doces', 'bebidas'],
-    casamento: ['doces', 'salgados', 'bebidas', 'decoracao'],
-    corporativo: ['salgados', 'bebidas'],
-    batizado: ['doces', 'cupcakes'],
-    formatura: ['cupcakes', 'doces', 'bebidas'],
-    cha_bebe: ['cupcakes', 'doces'],
+    casamento: ['cupcakes', 'docinhos', 'drinks', 'decoration'],
+    aniversario: ['cupcakes', 'docinhos'],
+    corporativo: ['coffee_break', 'salgados', 'drinks'],
+    baptizado: ['docinhos', 'lembrancinhas'],
+    bodas: ['cupcakes', 'docinhos', 'drinks'],
+    baby_shower: ['cupcakes', 'docinhos', 'lembrancinhas'],
+    graduacao: ['salgados', 'drinks'],
+    outro: ['docinhos'],
 };
 
 // === Step Indicator ===
@@ -154,17 +162,24 @@ export const QuotationWizard = ({ navigation }) => {
     const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
     const [imageUri, setImageUri] = useState(null);
 
-    // Pricing calculator
+    // Smart pricing calculator (matches shared calculateSmartPrice)
     const pricing = useMemo(() => {
-        const base = (BASE_PRICE_PER_GUEST[eventType] || 3500) * guestCount;
+        const basePerGuest = BASE_PRICE_PER_GUEST[eventType] || 2000;
+        const base = basePerGuest * guestCount;
         const complementsTotal = selectedComplements.reduce((sum, id) => {
             const c = COMPLEMENTS.find(x => x.id === id);
-            return sum + (c ? c.price : 0);
+            if (!c) return sum;
+            if (c.type === 'PER_GUEST') return sum + c.price * guestCount;
+            if (c.type === 'FIXED') return sum + c.price;
+            return sum + c.price; // PER_UNIT
         }, 0);
         const subtotal = base + complementsTotal;
         const tax = Math.round(subtotal * 0.05);
-        return { base, complementsTotal, subtotal, tax, total: subtotal + tax };
-    }, [eventType, guestCount, selectedComplements]);
+        const total = subtotal + tax;
+        // Confidence based on description detail
+        const confidence = notes.length > 50 ? 90 : notes.length > 0 ? 85 : 75;
+        return { base, complementsTotal, subtotal, tax, total, confidence };
+    }, [eventType, guestCount, selectedComplements, notes]);
 
     const suggestions = SUGGESTIONS[eventType] || [];
 
@@ -196,11 +211,13 @@ export const QuotationWizard = ({ navigation }) => {
             eventType,
             guestCount,
             date: eventDate.toISOString(),
-            complements: selectedComplements,
-            notes,
+            description: notes || undefined,
+            complements: selectedComplements.map(id => {
+                const c = COMPLEMENTS.find(x => x.id === id);
+                return c ? { name: c.label, type: c.type, unitPrice: c.price, quantity: c.type === 'PER_GUEST' ? guestCount : 1 } : null;
+            }).filter(Boolean),
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
-            estimatedTotal: pricing.total,
         };
 
         try {
@@ -293,14 +310,22 @@ export const QuotationWizard = ({ navigation }) => {
                 />
             ) : null}
 
-            {/* Notes */}
+            {/* Description (personalização) */}
             <PremiumInput
-                label="Observações (opcional)"
+                label="Descreve o teu pedido personalizado"
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Ex: Bolo de chocolate, tema unicórnio..."
+                placeholder="Ex: Bolo unicórnio 3 andares, cobertura fondant rosa com estrelas douradas..."
                 multiline
+                numberOfLines={4}
             />
+            {notes.length > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -8, marginBottom: 8 }}>
+                    <Text style={{ fontSize: 10, color: Theme.colors.textTertiary }}>
+                        ✨ Quanto mais detalhes, mais preciso o orçamento ({pricing.confidence}% confiança)
+                    </Text>
+                </View>
+            ) : null}
 
             {/* Reference image */}
             <TouchableOpacity style={styles.imageButton} onPress={pickImage} accessibilityLabel="Anexar imagem de referência">
