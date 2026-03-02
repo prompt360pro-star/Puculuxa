@@ -7,7 +7,7 @@ import {
     Users, Calendar, MessageSquare, ChevronDown, ChevronUp,
     Sparkles, Timer, ShoppingCart, X, Star
 } from 'lucide-react';
-import { QuotationWebService, Quotation, PaginatedResponse } from '@/services/quotationService';
+import { QuotationWebService, Quotation, PaginatedResponse, AdminBrief } from '@/services/quotationService';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -64,6 +64,68 @@ const EVENT_LABELS: Record<string, string> = {
 
 function formatKz(value: number) {
     return `Kz ${value.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// ─── Intelligence Brief Panel (standalone so useQuery is at component top-level) ───
+function BriefPanel({ quotationId }: { quotationId: string }) {
+    const { data: brief, isLoading } = useQuery<AdminBrief | null>({
+        queryKey: ['brief', quotationId],
+        queryFn: () => QuotationWebService.getBrief(quotationId),
+        staleTime: 5 * 60 * 1000,
+    });
+
+    return (
+        <div className="mt-4 pt-4 border-t border-border-main">
+            <h4 className="font-bold text-text-primary text-sm flex items-center gap-2 mb-3">
+                <Sparkles size={14} className="text-puculuxa-orange" /> Brief do Motor de Inteligência
+            </h4>
+            {isLoading ? (
+                <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    <Loader2 size={12} className="animate-spin" /> A carregar análise...
+                </div>
+            ) : brief ? (
+                <>
+                    <div className="grid grid-cols-4 gap-4">
+                        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-border-main text-center">
+                            <p className="text-[10px] font-bold text-text-secondary mb-1">COMPLEXIDADE</p>
+                            <div className="flex justify-center gap-1">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                    <Star key={i} size={12} fill={i < brief.complexityScore ? '#F97316' : 'none'} className={i < brief.complexityScore ? 'text-puculuxa-orange' : 'text-gray-300'} />
+                                ))}
+                            </div>
+                            <p className="text-xs text-text-secondary mt-1">{brief.complexityScore}/5</p>
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-border-main">
+                            <p className="text-[10px] font-bold text-text-secondary mb-1">PERFIL CLIENTE</p>
+                            <p className="text-sm font-black text-text-primary">{brief.clientProfile.tier}</p>
+                            <p className="text-[10px] text-text-secondary">{brief.clientProfile.totalOrders} pedidos · {brief.clientProfile.isRecurring ? '🔄 Recorrente' : '🆕 Novo'}</p>
+                        </div>
+                        <div className={`rounded-xl p-4 border ${brief.feasibility.isPossible ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-500/30' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-500/30'}`}>
+                            <p className="text-[10px] font-bold text-text-secondary mb-1">VIABILIDADE</p>
+                            <p className={`text-sm font-black ${brief.feasibility.isPossible ? 'text-green-600' : 'text-red-600'}`}>
+                                {brief.feasibility.isPossible ? '✅ Possível' : '⛔ Inviável'}
+                            </p>
+                            <p className="text-[10px] text-text-secondary">{brief.feasibility.daysUntilEvent}d · {brief.feasibility.currentLoad}% cozinha</p>
+                        </div>
+                        <div className="bg-puculuxa-orange/5 rounded-xl p-4 border border-puculuxa-orange/20">
+                            <p className="text-[10px] font-bold text-text-secondary mb-1">PREÇO SUGERIDO IA</p>
+                            <p className="text-sm font-black text-puculuxa-orange">{brief.estimatedPrice}</p>
+                            {brief.suggestedProducts[0] && (
+                                <p className="text-[10px] text-text-secondary mt-1">💡 {brief.suggestedProducts[0].name}</p>
+                            )}
+                        </div>
+                    </div>
+                    {brief.summary && (
+                        <div className="mt-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-500/30">
+                            <p className="text-xs text-indigo-700 dark:text-indigo-300">{brief.summary}</p>
+                        </div>
+                    )}
+                </>
+            ) : (
+                <p className="text-xs text-text-secondary">Brief indisponível.</p>
+            )}
+        </div>
+    );
 }
 
 // ─── Main Page ───
@@ -461,6 +523,9 @@ export default function QuotationsPage() {
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {/* Intelligence Brief Panel */}
+                                                    <BriefPanel quotationId={q.id} />
                                                 </div>
                                             </td>
                                         </tr>
@@ -532,7 +597,7 @@ function ProposalModal({ quotationId, currentPrice, onClose, onSubmit, isLoading
                         <Send size={18} className="text-puculuxa-orange" />
                         Enviar Proposta
                     </h3>
-                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <button onClick={onClose} title="Fechar" aria-label="Fechar modal" className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         <X size={18} className="text-text-secondary" />
                     </button>
                 </div>
@@ -542,9 +607,13 @@ function ProposalModal({ quotationId, currentPrice, onClose, onSubmit, isLoading
                     <div>
                         <label className="block text-xs font-bold text-text-secondary mb-2">Preço da Proposta (Kz)</label>
                         <input
+                            id="proposal-price"
                             type="number"
                             value={price}
                             onChange={(e) => setPrice(e.target.value)}
+                            placeholder="Ex: 250000"
+                            title="Preço da proposta em Kz"
+                            aria-label="Preço da proposta em Kz"
                             className="w-full px-4 py-3 rounded-xl border border-border-main bg-transparent text-lg font-black text-puculuxa-orange outline-none focus:border-puculuxa-orange transition-colors"
                         />
                     </div>

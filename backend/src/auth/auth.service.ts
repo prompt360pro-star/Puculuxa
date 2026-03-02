@@ -114,6 +114,14 @@ export class AuthService {
     return result;
   }
 
+  async savePushToken(id: string, pushToken: string) {
+    await this.prisma.user.update({
+      where: { id },
+      data: { pushToken },
+    });
+    return { ok: true };
+  }
+
   async requestPasswordReset(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Always respond with success to avoid user enumeration

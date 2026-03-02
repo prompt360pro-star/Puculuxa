@@ -215,6 +215,7 @@ model User {
   city         String?
   resetToken   String?
   refreshToken String?
+  pushToken    String?          // Expo push token for mobile notifications
   deletedAt    DateTime?
   quotations   Quotation[]
   orders       Order[]

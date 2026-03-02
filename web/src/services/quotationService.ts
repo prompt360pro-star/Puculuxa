@@ -46,6 +46,26 @@ export interface AuditEntry {
     createdAt: string;
 }
 
+export interface AdminBrief {
+    complexityScore: number;
+    clientProfile: {
+        totalOrders: number;
+        totalSpent: number;
+        tier: string;
+        preferredEventType: string | null;
+        isRecurring: boolean;
+    };
+    feasibility: {
+        isPossible: boolean;
+        daysUntilEvent: number;
+        currentLoad: number;
+        isUrgent: boolean;
+    };
+    suggestedProducts: { id: string; name: string; price: number | null; popularityScore: number }[];
+    estimatedPrice: string;
+    summary: string;
+}
+
 export interface Quotation {
     id: string;
     eventType: string;
@@ -100,6 +120,17 @@ export const QuotationWebService = {
             return await response.json();
         } catch (error) {
             console.error('Error fetching quotation:', error);
+            return null;
+        }
+    },
+
+    async getBrief(id: string): Promise<AdminBrief | null> {
+        try {
+            const response = await fetch(`${BASE_URL}/quotations/${id}/brief`, { headers: getHeaders() });
+            if (!response.ok) throw new Error('Failed to fetch brief');
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching brief:', error);
             return null;
         }
     },

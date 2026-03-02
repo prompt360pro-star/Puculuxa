@@ -18,7 +18,7 @@ import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('login')
   @UsePipes(new ValidationPipe())
@@ -68,6 +68,16 @@ export class AuthController {
   ) {
     const id = req.user.id || req.user.userId;
     return this.authService.updateProfile(id!, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('push-token')
+  savePushToken(
+    @Request() req: { user: { id?: string; userId?: string } },
+    @Body('token') token: string,
+  ) {
+    const id = req.user.id || req.user.userId;
+    return this.authService.savePushToken(id!, token);
   }
 
   @Post('forgot-password')
