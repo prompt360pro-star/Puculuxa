@@ -8,14 +8,14 @@ import {
     Image,
     Dimensions,
     Share,
-    Alert
+    Alert,
+    TextInput
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Heart, Share2, Star, UtensilsCrossed, Tag, Info } from 'lucide-react-native';
 import { Theme } from '../theme';
 import { useFavoritesStore } from '../store/favoritesStore';
 import { useCartStore } from '../store/cartStore';
+import { useAuthStore } from '../store/authStore';
 import { ShoppingCart } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -36,6 +36,25 @@ export const ProductDetailScreen = ({ route }) => {
     const { product } = route.params || {};
     const { toggle, isFavorite } = useFavoritesStore();
     const faved = product ? isFavorite(product.id) : false;
+    const { user } = useAuthStore();
+
+    const [reviewText, setReviewText] = React.useState('');
+    const [mockReviews, setMockReviews] = React.useState([
+        { id: 1, name: 'Ana Silva', rating: 5, text: 'Bolo excelente, extremamente húmido!', date: '12 Out 2023' }
+    ]);
+
+    const handleAddReview = () => {
+        if (!reviewText.trim()) return;
+        setMockReviews([{
+            id: Date.now(),
+            name: user?.name || 'Visitante',
+            rating: 5,
+            text: reviewText,
+            date: new Date().toLocaleDateString('pt-BR')
+        }, ...mockReviews]);
+        setReviewText('');
+        Alert.alert('Avaliação Submetida', 'Obrigado pelo seu feedback!');
+    };
 
     if (!product) {
         return (
@@ -105,12 +124,12 @@ export const ProductDetailScreen = ({ route }) => {
                         </TouchableOpacity>
                     </View>
                 </View>
-                {product.category && (
+                {product.category ? (
                     <View style={styles.categoryBadge}>
                         <Tag size={12} color={Theme.colors.primary} />
                         <Text style={styles.categoryText}>{product.category}</Text>
                     </View>
-                )}
+                ) : null}
             </View>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -180,7 +199,7 @@ export const ProductDetailScreen = ({ route }) => {
                         <Star size={16} color={Theme.colors.textSecondary} />
                         <Text style={styles.sectionTitle}>Avaliações Recentes</Text>
                     </View>
-                    {MOCK_REVIEWS.map(r => (
+                    {mockReviews.map(r => (
                         <View key={r.id} style={styles.reviewCard}>
                             <View style={styles.reviewHeader}>
                                 <Text style={styles.reviewName}>{r.name}</Text>
@@ -194,6 +213,22 @@ export const ProductDetailScreen = ({ route }) => {
                             <Text style={styles.reviewText}>{r.text}</Text>
                         </View>
                     ))}
+
+                    {/* Add Review Box */}
+                    <View style={styles.addReviewBox}>
+                        <Text style={styles.addReviewTitle}>Deixar Avaliação como <Text style={{ fontWeight: 'bold' }}>{user?.name || 'Visitante'}</Text></Text>
+                        <TextInput
+                            style={styles.reviewInput}
+                            placeholder="Escreva a sua avaliação..."
+                            placeholderTextColor="#999"
+                            multiline
+                            value={reviewText}
+                            onChangeText={setReviewText}
+                        />
+                        <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
+                            <Text style={styles.submitReviewText}>Enviar</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Relacionados */}
@@ -330,9 +365,14 @@ const styles = StyleSheet.create({
     reviewCard: { backgroundColor: 'white', padding: 16, borderRadius: Theme.radius.lg, marginBottom: 12, borderWidth: 1, borderColor: '#f0f0f0' },
     reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
     reviewName: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-    reviewDate: { fontSize: 11, color: Theme.colors.textSecondary },
-    reviewStars: { flexDirection: 'row', gap: 2, marginBottom: 8 },
-    reviewText: { fontSize: 14, color: '#555', lineHeight: 20 },
+    reviewDate: { fontSize: 12, color: Theme.colors.textSecondary },
+    reviewStars: { flexDirection: 'row', marginBottom: 8, gap: 2 },
+    reviewText: { fontSize: 13, color: '#444', lineHeight: 20 },
+    addReviewBox: { marginTop: 16, backgroundColor: '#f9f9f9', padding: 16, borderRadius: 12 },
+    addReviewTitle: { fontSize: 13, color: '#666', marginBottom: 8 },
+    reviewInput: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#eee', minHeight: 80, textAlignVertical: 'top', color: '#333' },
+    submitReviewBtn: { backgroundColor: Theme.colors.primary, padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 12 },
+    submitReviewText: { color: 'white', fontWeight: 'bold' },
     footer: {
         position: 'absolute', bottom: 0, left: 0, right: 0,
         padding: Theme.spacing.xl, paddingBottom: 40,

@@ -9,14 +9,14 @@ export const CakeDesignerScreen = () => {
     const navigation = useNavigation();
     const { addToCart } = useCartStore();
     const [tiers, setTiers] = useState(2);
-    const [color, setColor] = useState('#FFC0CB');
+    const [color, setColor] = useState('#FFF8DC');
 
     const COLORS = [
-        { name: 'Rosa Pastel', value: '#FFC0CB' },
-        { name: 'Branco Baunilha', value: '#FFF8DC' },
-        { name: 'Chocolate Escuro', value: '#3B2F2F' },
-        { name: 'Azul Tiffany', value: '#81D8D0' },
-        { name: 'Ouro Real', value: '#D4AF37' }
+        { name: 'Baunilha Suave', value: '#FFF8DC' },
+        { name: 'Chocolate Velvet', value: '#4A3B32' },
+        { name: 'Caramelo Tostado', value: '#C68E17' },
+        { name: 'Ouro Real', value: '#D4AF37' },
+        { name: 'Rose Gold', value: '#B76E79' }
     ];
 
     const handleAddToCart = () => {
@@ -83,7 +83,10 @@ export const CakeDesignerScreen = () => {
                 </View>
 
                 <View style={styles.controlsContainer}>
-                    <Text style={styles.controlSectionTitle}><Layers size={18} color="#333" /> Andares (1-5)</Text>
+                    <View style={[styles.controlSectionContainer, { marginBottom: 16 }]}>
+                        <Layers size={18} color="#333" style={{ marginRight: 8 }} />
+                        <Text style={styles.controlSectionTitle}>Andares (1-5)</Text>
+                    </View>
                     <View style={styles.tiersControl}>
                         <TouchableOpacity style={[styles.roundBtn, tiers <= 1 && styles.disabledBtn]} onPress={() => setTiers(Math.max(1, tiers - 1))} disabled={tiers <= 1}>
                             <Minus size={20} color={tiers <= 1 ? '#aaa' : 'white'} />
@@ -94,7 +97,10 @@ export const CakeDesignerScreen = () => {
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={[styles.controlSectionTitle, { marginTop: 24 }]}><Palette size={18} color="#333" /> Cobertura Principal</Text>
+                    <View style={[styles.controlSectionContainer, { marginTop: 24, marginBottom: 16 }]}>
+                        <Palette size={18} color="#333" style={{ marginRight: 8 }} />
+                        <Text style={styles.controlSectionTitle}>Cobertura Principal</Text>
+                    </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.colorsScroll}>
                         {COLORS.map((c, idx) => (
                             <TouchableOpacity
@@ -148,7 +154,8 @@ const styles = StyleSheet.create({
     pieceShadow: { width: '100%', height: 8, backgroundColor: 'rgba(0,0,0,0.1)' },
     cakeBase: { width: 220, height: 16, backgroundColor: '#E0E0E0', borderRadius: 8, elevation: 4 },
     controlsContainer: { padding: 24 },
-    controlSectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 16, flexDirection: 'row', alignItems: 'center' },
+    controlSectionContainer: { flexDirection: 'row', alignItems: 'center' },
+    controlSectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
     tiersControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', alignSelf: 'flex-start', borderRadius: 24, padding: 8, ...Theme.shadows?.light },
     roundBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
     disabledBtn: { backgroundColor: '#f0f0f0' },

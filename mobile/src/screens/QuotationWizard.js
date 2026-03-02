@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions, Image, Modal, FlatList } from 'react-native';
 import { ChevronRight, ChevronLeft, CheckCircle, Calculator, Sparkles, Wand2, User, Image as ImageIcon } from 'lucide-react-native';
 import { Theme } from '../theme';
 import { ApiService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 const { width } = Dimensions.get('window');
 
@@ -35,6 +34,25 @@ export const QuotationWizard = ({ navigation }) => {
     const [imageUri, setImageUri] = useState(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [blockedDates, setBlockedDates] = useState([]);
+
+    const availableDates = React.useMemo(() => {
+        const dates = [];
+        let d = new Date();
+        d.setDate(d.getDate() + 1); // amanha
+        for (let i = 0; i < 365; i++) {
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            const isoDate = `${year}-${month}-${day}`;
+            const displayDate = `${day}/${month}/${year}`;
+
+            const isBlocked = blockedDates.includes(isoDate);
+            dates.push({ id: isoDate, displayDate, isBlocked });
+
+            d.setDate(d.getDate() + 1);
+        }
+        return dates;
+    }, [blockedDates]);
 
 
     // Animation values
@@ -169,11 +187,18 @@ export const QuotationWizard = ({ navigation }) => {
                 referenceImage = uploadRes.url;
             }
 
-            const response = await ApiService.postQuotation({
-                ...formData,
+            const payload = {
+                eventType: formData.eventType === 'outro' ? formData.customEventType : formData.eventType,
+                guestCount: parseInt(formData.guestCount, 10) || 0,
+                date: formData.date,
+                complements: formData.complements,
+                customerName: formData.customerName,
+                customerPhone: formData.customerPhone,
                 referenceImage,
                 total: totalEstimated
-            });
+            };
+
+            const response = await ApiService.postQuotation(payload);
 
             if (response.id) {
                 Alert.alert(
@@ -288,33 +313,37 @@ export const QuotationWizard = ({ navigation }) => {
                             </Text>
                         </TouchableOpacity>
 
-                        {showDatePicker && (
-                            <DateTimePicker
-                                value={formData.date ? new Date(formData.date.split('/').reverse().join('-')) : new Date(Date.now() + 86400000)}
-                                mode="date"
-                                display="default"
-                                minimumDate={new Date(Date.now() + 86400000)} // amanha
-                                onChange={(event, selectedDate) => {
-                                    setShowDatePicker(false);
-                                    if (selectedDate) {
-                                        const day = String(selectedDate.getDate()).padStart(2, '0');
-                                        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                                        const year = selectedDate.getFullYear();
-
-                                        const isoDate = `${year}-${month}-${day}`;
-                                        if (blockedDates.includes(isoDate)) {
-                                            Alert.alert(
-                                                'Data Indisponível',
-                                                'Infelizmente esta data já atingiu o limite de reservas. Por favor, escolha outra.'
-                                            );
-                                            return;
-                                        }
-
-                                        setFormData({ ...formData, date: `${day}/${month}/${year}` });
-                                    }
-                                }}
-                            />
-                        )}
+                        <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+                            <View style={styles.modalOverlay}>
+                                <View style={styles.modalContent}>
+                                    <View style={styles.modalHeader}>
+                                        <Text style={styles.modalTitle}>Selecione a Data</Text>
+                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                                            <Text style={styles.modalCloseText}>Fechar</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                    <FlatList
+                                        data={availableDates}
+                                        keyExtractor={item => item.id}
+                                        showsVerticalScrollIndicator={false}
+                                        renderItem={({ item }) => (
+                                            <TouchableOpacity
+                                                style={[styles.dateItem, item.isBlocked && styles.dateItemBlocked, formData.date === item.displayDate && styles.dateItemActive]}
+                                                disabled={item.isBlocked}
+                                                onPress={() => {
+                                                    setFormData({ ...formData, date: item.displayDate });
+                                                    setShowDatePicker(false);
+                                                }}
+                                            >
+                                                <Text style={[styles.dateText, item.isBlocked && styles.dateTextBlocked, formData.date === item.displayDate && styles.dateTextActive]}>
+                                                    {item.displayDate} {item.isBlocked ? '(Indisponível)' : ''}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    />
+                                </View>
+                            </View>
+                        </Modal>
 
                         <Text style={styles.stepTitle}>Imagem de Referência (Opcional)</Text>
                         <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage} activeOpacity={0.8}>
@@ -376,14 +405,14 @@ export const QuotationWizard = ({ navigation }) => {
                                 <Text style={styles.summaryLabel}>Data</Text>
                                 <Text style={styles.summaryValue}>{formData.date}</Text>
                             </View>
-                            {imageUri && (
+                            {imageUri ? (
                                 <View style={styles.summaryRow}>
                                     <Text style={styles.summaryLabel}>Imagem de Referência</Text>
                                     <Image source={{ uri: imageUri }} style={{ width: 40, height: 40, borderRadius: 8 }} />
                                 </View>
-                            )}
+                            ) : null}
 
-                            {formData.complements.length > 0 && (
+                            {formData.complements.length > 0 ? (
                                 <>
                                     <View style={[styles.divider, { marginVertical: 12 }]} />
                                     <Text style={[styles.summaryLabel, { marginBottom: 8 }]}>Complementos Adicionados:</Text>
@@ -398,7 +427,7 @@ export const QuotationWizard = ({ navigation }) => {
                                         );
                                     })}
                                 </>
-                            )}
+                            ) : null}
 
                             <View style={styles.divider} />
 
@@ -668,4 +697,17 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginRight: 8,
     },
+    summaryTotalLabel: { fontSize: 18, fontWeight: 'bold', color: 'white' },
+    summaryTotalValue: { fontSize: 24, fontWeight: 'bold', color: 'white' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '70%', padding: 24 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+    modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary },
+    modalCloseText: { fontSize: 16, color: '#E57373', fontWeight: 'bold' },
+    dateItem: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+    dateItemActive: { backgroundColor: '#fef3e2', borderRadius: 8, paddingHorizontal: 16, borderBottomWidth: 0 },
+    dateItemBlocked: { opacity: 0.5 },
+    dateText: { fontSize: 16, color: '#333' },
+    dateTextActive: { fontWeight: 'bold', color: Theme.colors.primary },
+    dateTextBlocked: { color: '#999', textDecorationLine: 'line-through' }
 });

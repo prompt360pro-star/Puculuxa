@@ -14,10 +14,10 @@ export const CartScreen = () => {
     const [couponCode, setCouponCode] = useState('');
     const [discountValue, setDiscountValue] = useState(0);
 
-    const subtotal = getCartTotal();
+    const subtotal = Number(getCartTotal()) || 0;
     const deliveryFee = subtotal > 0 ? 2500 : 0; // Taxa fixa Kz 2.500
     const pointsDiscount = usePoints ? 5000 : 0; // Ex: Usa 500pts = Kz 5.000
-    const total = subtotal + deliveryFee - pointsDiscount - discountValue;
+    const total = Math.max(0, subtotal + deliveryFee - pointsDiscount - discountValue);
 
     const applyCoupon = () => {
         if (couponCode.toUpperCase() === 'FINAL20') {
@@ -115,12 +115,12 @@ export const CartScreen = () => {
                             <Text style={styles.summaryLabel}>Taxa de Entrega</Text>
                             <Text style={styles.summaryValue}>Kz {deliveryFee.toLocaleString('pt-BR')}</Text>
                         </View>
-                        {usePoints && (
+                        {usePoints ? (
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Desconto (Pontos)</Text>
                                 <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>- Kz 5.000</Text>
                             </View>
-                        )}
+                        ) : null}
                         <View style={styles.couponContainer}>
                             <TextInput
                                 style={styles.couponInput}
@@ -132,12 +132,12 @@ export const CartScreen = () => {
                                 <Text style={styles.couponBtnText}>Aplicar</Text>
                             </TouchableOpacity>
                         </View>
-                        {discountValue > 0 && (
+                        {discountValue > 0 ? (
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Desconto (Cupão)</Text>
                                 <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>- Kz {discountValue.toLocaleString('pt-BR')}</Text>
                             </View>
-                        )}
+                        ) : null}
                         <View style={[styles.summaryRow, styles.totalRow]}>
                             <Text style={styles.totalLabel}>Total</Text>
                             <Text style={styles.totalValue}>Kz {total.toLocaleString('pt-BR')}</Text>

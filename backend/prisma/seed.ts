@@ -51,19 +51,14 @@ async function main() {
     ];
 
     const createdProducts = [];
-    // Only create products if they don't exist to avoid duplicates
-    const existingProducts = await prisma.product.count();
-    if (existingProducts === 0) {
-        for (const prod of productsData) {
-            const p = await prisma.product.create({ data: prod });
-            createdProducts.push(p);
+    for (const prod of productsData) {
+        let p = await prisma.product.findFirst({ where: { name: prod.name } });
+        if (!p) {
+            p = await prisma.product.create({ data: prod });
         }
-        console.log('Created 5 products');
-    } else {
-        const allProducts = await prisma.product.findMany();
-        createdProducts.push(...allProducts);
-        console.log('Products already exist');
+        createdProducts.push(p);
     }
+    console.log(`Ensured ${createdProducts.length} base products exist`);
 
     // Create an Order with OrderItems for Admin (if no orders exist)
     const existingOrders = await prisma.order.count();

@@ -33,11 +33,11 @@ export const BottomNav = () => {
             <TouchableOpacity style={styles.navItem} onPress={() => navigateTo('Cart')}>
                 <View>
                     <ShoppingCart size={24} color={currentRoute === 'Cart' ? Theme.colors.primary : Theme.colors.textSecondary} />
-                    {cartItemsCount > 0 && (
+                    {cartItemsCount > 0 ? (
                         <View style={styles.badge}>
                             <Text style={styles.badgeText}>{cartItemsCount}</Text>
                         </View>
-                    )}
+                    ) : null}
                 </View>
                 <Text style={[styles.navText, currentRoute === 'Cart' && { color: Theme.colors.primary }]}>Carrinho</Text>
             </TouchableOpacity>

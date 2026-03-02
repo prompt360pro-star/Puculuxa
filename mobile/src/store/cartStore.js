@@ -37,9 +37,12 @@ export const useCartStore = create(
                 const { items } = get();
                 return items.reduce((total, item) => {
                     // Remove "Kz " and dots to parse as number
-                    const price = typeof item.price === 'string'
-                        ? parseFloat(item.price.replace(/[^0-9,-]+/g, "").replace(',', '.'))
-                        : item.price;
+                    let price = 0;
+                    if (typeof item.price === 'string') {
+                        price = parseFloat(item.price.replace(/[^0-9,-]+/g, "").replace(',', '.')) || 0;
+                    } else {
+                        price = Number(item.price) || 0;
+                    }
                     return total + (price * item.quantity);
                 }, 0);
             }

@@ -9,7 +9,8 @@ import {
     Image,
     Dimensions,
     FlatList,
-    StatusBar
+    StatusBar,
+    Animated
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -42,6 +43,16 @@ const ProductCard = ({ product }) => {
     const { toggle, isFavorite } = useFavoritesStore();
     const [imageError, setImageError] = React.useState(false);
     const faved = isFavorite(product.id);
+    const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+    const handleFavorite = () => {
+        Animated.sequence([
+            Animated.timing(scaleAnim, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+            Animated.timing(scaleAnim, { toValue: 1, duration: 100, useNativeDriver: true })
+        ]).start();
+        toggle(product);
+    };
+
     return (
         <TouchableOpacity
             style={styles.productCard}
@@ -54,8 +65,10 @@ const ProductCard = ({ product }) => {
                     <Text style={{ fontSize: 36 }}>🎂</Text>
                 </View>
             }
-            <TouchableOpacity style={[styles.favBtn, faved && styles.favBtnActive]} onPress={() => toggle(product)}>
-                <Heart size={14} color={faved ? '#E57373' : '#aaa'} fill={faved ? '#E57373' : 'transparent'} />
+            <TouchableOpacity style={[styles.favBtn, faved && styles.favBtnActive]} onPress={handleFavorite} activeOpacity={0.8}>
+                <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                    <Heart size={14} color={faved ? '#E57373' : '#aaa'} fill={faved ? '#E57373' : 'transparent'} />
+                </Animated.View>
             </TouchableOpacity>
             <View style={styles.productInfo}>
                 <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
@@ -180,11 +193,11 @@ export const HomeScreen = () => {
                                 <View style={styles.headerActions}>
                                     <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('Cart')}>
                                         <ShoppingCart size={24} color="white" />
-                                        {cartItemsCount > 0 && (
+                                        {cartItemsCount > 0 ? (
                                             <View style={styles.badge}>
                                                 <Text style={styles.badgeText}>{cartItemsCount}</Text>
                                             </View>
-                                        )}
+                                        ) : null}
                                     </TouchableOpacity>
                                     <TouchableOpacity style={styles.headerIcon} onPress={handleOpenProfile}>
                                         <User size={24} color="white" />

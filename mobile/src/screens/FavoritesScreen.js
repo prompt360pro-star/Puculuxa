@@ -6,31 +6,7 @@ import { Theme } from '../theme';
 import { useCartStore } from '../store/cartStore';
 import { BottomNav } from '../components/ui/BottomNav';
 
-// Simple favorites store — tracks product ids
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export const useFavoritesStore = create(
-    persist(
-        (set, get) => ({
-            favorites: [],
-            toggle: (product) => {
-                const exists = get().favorites.find(p => p.id === product.id);
-                set({
-                    favorites: exists
-                        ? get().favorites.filter(p => p.id !== product.id)
-                        : [...get().favorites, product]
-                });
-            },
-            isFavorite: (id) => !!get().favorites.find(p => p.id === id),
-        }),
-        {
-            name: 'puculuxa_favorites',
-            storage: createJSONStorage(() => AsyncStorage),
-        }
-    )
-);
+import { useFavoritesStore } from '../store/favoritesStore';
 
 export const FavoritesScreen = () => {
     const navigation = useNavigation();
@@ -60,9 +36,9 @@ export const FavoritesScreen = () => {
             )}
             <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-                {item.category && (
+                {item.category ? (
                     <Text style={styles.category}>{item.category}</Text>
-                )}
+                ) : null}
                 {item.price ? (
                     <Text style={styles.price}>Kz {item.price.toLocaleString('pt-BR')}</Text>
                 ) : (
@@ -76,14 +52,14 @@ export const FavoritesScreen = () => {
                 >
                     <Heart size={18} color="#E57373" fill="#E57373" />
                 </TouchableOpacity>
-                {item.price && (
+                {item.price ? (
                     <TouchableOpacity
                         style={[styles.icon, { backgroundColor: Theme.colors.surface }]}
                         onPress={() => { addItem(item); navigation.goBack(); }}
                     >
                         <ShoppingCart size={18} color={Theme.colors.primary} />
                     </TouchableOpacity>
-                )}
+                ) : null}
             </View>
         </View>
     );
