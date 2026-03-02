@@ -15,6 +15,7 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { QuotationService } from './quotation.service';
+import { QuotationIntelligenceService } from './quotation-intelligence.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { PdfService } from '../common/pdf.service';
@@ -31,6 +32,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 export class QuotationController {
   constructor(
     private readonly quotationService: QuotationService,
+    private readonly intelligenceService: QuotationIntelligenceService,
     private readonly pdfService: PdfService,
     private readonly imageService: ImageService,
   ) { }
@@ -80,6 +82,14 @@ export class QuotationController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.quotationService.findOne(id);
+  }
+
+  // ─── Admin Brief (Intelligence) ───
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get(':id/brief')
+  getBrief(@Param('id') id: string) {
+    return this.intelligenceService.generateAdminBrief(id);
   }
 
   // ─── Actualizar Status (com guard + auditoria) ───
