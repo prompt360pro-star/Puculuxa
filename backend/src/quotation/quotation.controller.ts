@@ -48,7 +48,6 @@ export class QuotationController {
 
   // ─── Criar Orçamento ───
   @Post()
-  @UsePipes(new ValidationPipe({ whitelist: true }))
   create(@Body() dto: CreateQuotationDto, @Req() req: Request) {
     const userId = (req as any).user?.id || null;
     return this.quotationService.create(dto, userId);

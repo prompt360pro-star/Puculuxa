@@ -214,19 +214,39 @@ export class QuotationService {
 
     // Criar Order numa transação
     const order = await this.prisma.$transaction(async (tx) => {
+      // Resolve orderUserId: use quotation.customerId, else validate adminId is a real user ID,
+      // else fall back to the first ADMIN user in the DB (anonymous/guest quotations)
+      let orderUserId = quotation.customerId;
+      if (!orderUserId) {
+        const adminUser = await tx.user.findFirst({
+          where: {
+            OR: [
+              { id: adminId },
+              { role: 'ADMIN' },
+            ],
+          },
+          select: { id: true },
+        });
+        orderUserId = adminUser?.id || adminId;
+      }
+
       const newOrder = await tx.order.create({
         data: {
-          userId: quotation.customerId || '',
+          userId: orderUserId,
           total: finalPrice,
           status: 'PENDING',
-          items: {
-            create: (quotation.items || []).map((item) => ({
-              productId: item.productId,
-              name: item.name,
-              price: item.price,
-              quantity: item.quantity,
-            })),
-          },
+          ...(quotation.items && quotation.items.length > 0
+            ? {
+              items: {
+                create: quotation.items.map((item) => ({
+                  productId: item.productId,
+                  name: item.name,
+                  price: item.price,
+                  quantity: item.quantity,
+                })),
+              },
+            }
+            : {}),
         },
         include: { items: true },
       });
