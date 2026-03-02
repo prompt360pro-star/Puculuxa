@@ -122,6 +122,22 @@ export class AuthService {
     return { ok: true };
   }
 
+  async getUserReminders(userId: string) {
+    return this.prisma.eventReminder.findMany({
+      where: { userId },
+      orderBy: { nextReminder: 'asc' },
+      select: {
+        id: true,
+        eventName: true,
+        eventType: true,
+        eventDate: true,
+        nextReminder: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
   async requestPasswordReset(email: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Always respond with success to avoid user enumeration

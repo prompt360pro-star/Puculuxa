@@ -44,53 +44,14 @@ import { ToastProvider } from './src/components/ui/Toast';
 import { CustomTabBar } from './src/components/navigation/CustomTabBar';
 import { Theme } from './src/theme';
 
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
+import { initPushNotifications, addNotificationReceivedListener, addNotificationResponseListener, clearBadge } from './src/services/pushNotificationService';
 
 LogBox.ignoreLogs([
     'Unable to activate keep awake',
     'InteractionManager has been deprecated',
 ]);
 
-// === Push Notifications ===
-const isExpoGo = Constants.appOwnership === 'expo';
-let Notifications = null;
-if (!isExpoGo) {
-    Notifications = require('expo-notifications');
-}
-if (Notifications) {
-    Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-            shouldShowAlert: true,
-            shouldPlaySound: true,
-            shouldSetBadge: false,
-        }),
-    });
-}
 
-async function registerForPushNotificationsAsync() {
-    if (!Notifications || isExpoGo || !Device.isDevice) return null;
-    try {
-        const { status } = await Notifications.getPermissionsAsync();
-        let finalStatus = status;
-        if (status !== 'granted') {
-            const { status: s } = await Notifications.requestPermissionsAsync();
-            finalStatus = s;
-        }
-        if (finalStatus !== 'granted') return null;
-        const token = (await Notifications.getExpoPushTokenAsync({ projectId: 'puculuxa-mobile' })).data;
-        if (Platform.OS === 'android') {
-            Notifications.setNotificationChannelAsync('default', {
-                name: 'default',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-            });
-        }
-        return token;
-    } catch {
-        return null;
-    }
-}
 
 // === Navigators ===
 const AuthStack = createStackNavigator();
@@ -177,6 +138,29 @@ export default function App() {
     const [fontsLoaded, setFontsLoaded] = useState(false);
     const { isAuthenticated, restoreSession } = useAuthStore();
 
+    // Push notifications: init after auth, sync token with backend
+    useEffect(() => {
+        if (isAuthenticated) {
+            initPushNotifications().catch(() => { });
+            clearBadge().catch(() => { });
+        }
+    }, [isAuthenticated]);
+
+    // Notification listeners
+    useEffect(() => {
+        const receivedSub = addNotificationReceivedListener((notification) => {
+            console.log('[Push] Notificação recebida:', notification.request.content.title);
+        });
+        const responseSub = addNotificationResponseListener((response) => {
+            console.log('[Push] Utilizador tocou na notificação:', response.notification.request.content.title);
+            // TODO: navegar para ecrã relevante com base em data.screen
+        });
+        return () => {
+            receivedSub.remove();
+            responseSub.remove();
+        };
+    }, []);
+
     useEffect(() => {
         async function init() {
             try {
@@ -196,7 +180,6 @@ export default function App() {
         }
         init();
         restoreSession();
-        registerForPushNotificationsAsync();
     }, []);
 
     if (!fontsLoaded) return null;

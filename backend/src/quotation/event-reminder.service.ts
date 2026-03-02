@@ -105,8 +105,17 @@ export class EventReminderService {
             return;
         }
 
-        // Log the reminder (actual push/SMS delivery plugs in here)
-        this.logger.log(`[EventReminder] Sending to ${reminder.user.email}: ${message}`);
+        // ─── Deliver via Expo Push API ───
+        this.logger.log(`[EventReminder] Sending to ${reminder.user.email}: ${message.substring(0, 60)}...`);
+
+        if (reminder.user?.pushToken) {
+            await this.sendExpoPush(
+                reminder.user.pushToken,
+                '🎂 Puculuxa — Lembrete de Evento',
+                message,
+                { reminderId: reminder.id, eventName: reminder.eventName, screen: 'QuotationTab' },
+            );
+        }
 
         // Update reminder state
         await this.prisma.eventReminder.update({
@@ -118,6 +127,58 @@ export class EventReminderService {
                     : new Date(Date.now() + 999 * 86400000), // far future if terminal
             },
         });
+    }
+
+    // ─── Expo Push API HTTP delivery ───
+    private async sendExpoPush(
+        pushToken: string,
+        title: string,
+        body: string,
+        data?: Record<string, unknown>,
+    ): Promise<void> {
+        if (!pushToken.startsWith('ExponentPushToken[')) {
+            this.logger.warn(`[Push] Invalid token format: ${pushToken.substring(0, 20)}`);
+            return;
+        }
+        const payload = JSON.stringify({
+            to: pushToken,
+            title,
+            body,
+            data: data || {},
+            sound: 'default',
+            priority: 'high',
+            channelId: 'puculuxa_reminders',
+        });
+        try {
+            const https = await import('https');
+            await new Promise<void>((resolve, reject) => {
+                const req = https.request(
+                    {
+                        hostname: 'exp.host',
+                        path: '/--/api/v2/push/send',
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/json',
+                            'accept-encoding': 'gzip, deflate',
+                        },
+                    },
+                    (res) => {
+                        let raw = '';
+                        res.on('data', (c) => (raw += c));
+                        res.on('end', () => {
+                            this.logger.log(`[Push] Expo response: ${res.statusCode} — ${raw.substring(0, 80)}`);
+                            resolve();
+                        });
+                    },
+                );
+                req.on('error', reject);
+                req.write(payload);
+                req.end();
+            });
+        } catch (err) {
+            this.logger.error(`[Push] Expo push delivery failed: ${err}`);
+        }
     }
 
     // ─── Create reminder after order converts ───

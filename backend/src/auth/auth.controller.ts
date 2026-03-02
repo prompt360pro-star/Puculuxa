@@ -93,6 +93,13 @@ export class AuthController {
     return this.authService.resetPassword(token, newPassword);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('reminders')
+  getMyReminders(@Request() req: { user: { id?: string; userId?: string } }) {
+    const id = req.user.id || req.user.userId;
+    return this.authService.getUserReminders(id!);
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get('users')

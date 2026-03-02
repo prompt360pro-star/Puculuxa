@@ -1,63 +1,166 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    View, Text, StyleSheet, FlatList, TouchableOpacity,
+    RefreshControl, ActivityIndicator,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronLeft, Bell, Gift, Package, Star } from 'lucide-react-native';
+import { ChevronLeft, Bell, Calendar, Package, ShoppingBag, RefreshCw } from 'lucide-react-native';
 import { Theme, T } from '../theme';
+import { apiClient } from '../config/api.config';
 
-const MOCK_NOTIFS = [
-    { id: '1', type: 'PROMO', title: '20% de Desconto!', desc: 'Usa o cupão FINAL20 para bolos.', time: 'Há 1 hora', read: false },
-    { id: '2', type: 'ORDER', title: 'Encomenda #ORD-123', desc: 'A tua encomenda já está a caminho.', time: 'Há 2 horas', read: false },
-    { id: '3', type: 'SYSTEM', title: 'Bem-vindo(a) ao Puculuxa!', desc: 'Obrigado(a) por instalares a nossa app.', time: 'Há 1 dia', read: true },
-];
-
-const getIcon = (type) => {
-    switch (type) {
-        case 'PROMO': return <Gift size={18} color={Theme.colors.primary} />;
-        case 'ORDER': return <Package size={18} color={Theme.colors.info} />;
-        default: return <Star size={18} color={Theme.colors.textTertiary} />;
-    }
+// ─── Types ───
+const STATUS_LABELS = {
+    PENDING: { label: 'Agendado', color: '#6366F1' },
+    SENT_30D: { label: 'Enviado 30d', color: '#F97316' },
+    SENT_7D: { label: 'Enviado 7d', color: '#EAB308' },
+    SENT_3D: { label: 'Enviado 3d', color: '#EF4444' },
+    COMPLETED: { label: 'Concluído', color: '#22C55E' },
 };
 
+const EVENT_ICONS = {
+    casamento: '💒',
+    aniversario: '🎂',
+    corporativo: '💼',
+    baptizado: '⛪',
+    outro: '📋',
+};
+
+function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('pt-AO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatRelative(dateStr) {
+    if (!dateStr) return '';
+    const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+    if (diff < 0) return 'Passou';
+    if (diff === 0) return 'Hoje!';
+    if (diff === 1) return 'Amanhã';
+    return `Daqui a ${diff} dias`;
+}
+
+// ─── Single Reminder Card ───
+function ReminderCard({ item }) {
+    const statusCfg = STATUS_LABELS[item.status] || { label: item.status, color: '#888' };
+    const icon = EVENT_ICONS[item.eventType] || '📋';
+    const daysLabel = formatRelative(item.eventDate);
+
+    return (
+        <View style={styles.card}>
+            <View style={styles.cardLeft}>
+                <Text style={styles.eventIcon}>{icon}</Text>
+            </View>
+            <View style={styles.cardContent}>
+                <View style={styles.cardTop}>
+                    <Text style={styles.eventName} numberOfLines={1}>{item.eventName}</Text>
+                    <View style={[styles.badge, { backgroundColor: statusCfg.color + '22' }]}>
+                        <Text style={[styles.badgeText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
+                    </View>
+                </View>
+                <View style={styles.cardMeta}>
+                    <Calendar size={11} color={Theme.colors.textTertiary} />
+                    <Text style={styles.metaText}>{formatDate(item.eventDate)}</Text>
+                    {daysLabel ? (
+                        <Text style={[styles.metaText, { color: Theme.colors.primary, fontWeight: '700', marginLeft: 6 }]}>
+                            {daysLabel}
+                        </Text>
+                    ) : null}
+                </View>
+                {item.nextReminder && item.status !== 'COMPLETED' && (
+                    <View style={styles.cardMeta}>
+                        <Bell size={11} color={Theme.colors.textTertiary} />
+                        <Text style={styles.metaText}>Próx. lembrete: {formatDate(item.nextReminder)}</Text>
+                    </View>
+                )}
+            </View>
+        </View>
+    );
+}
+
+// ─── Main Screen ───
 export const NotificationsScreen = () => {
     const navigation = useNavigation();
+    const [reminders, setReminders] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState(null);
 
-    const renderItem = ({ item }) => (
-        <TouchableOpacity style={[styles.card, !item.read ? styles.cardUnread : null]} activeOpacity={0.85} accessibilityRole="button">
-            <View style={[styles.iconBox, !item.read ? { backgroundColor: Theme.colors.primaryGhost } : null]}>
-                {getIcon(item.type)}
-            </View>
-            <View style={styles.textContainer}>
-                <View style={styles.titleRow}>
-                    <Text style={[styles.titleText, !item.read ? styles.titleUnread : null]}>{item.title}</Text>
-                    <Text style={styles.timeText}>{item.time}</Text>
-                </View>
-                <Text style={styles.descText} numberOfLines={2}>{item.desc}</Text>
-            </View>
-        </TouchableOpacity>
+    const load = useCallback(async (isRefresh = false) => {
+        isRefresh ? setIsRefreshing(true) : setIsLoading(true);
+        setError(null);
+        try {
+            const res = await apiClient.get('/auth/reminders');
+            setReminders(res.data || []);
+        } catch (err) {
+            setError('Não foi possível carregar as notificações.');
+            console.error('[Notifications] Error:', err);
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const renderEmpty = () => (
+        <View style={styles.empty}>
+            <Bell size={52} color={Theme.colors.borderStrong} />
+            <Text style={styles.emptyTitle}>Sem lembretes activos</Text>
+            <Text style={styles.emptyText}>
+                Depois de fazer uma encomenda, receberás lembretes automáticos antes do teu evento.
+            </Text>
+        </View>
     );
 
     return (
         <View style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.backBtn}
+                    accessibilityLabel="Voltar"
+                >
                     <ChevronLeft size={22} color={Theme.colors.primary} />
                 </TouchableOpacity>
-                <Text style={styles.title}>Notificações</Text>
-                <View style={{ width: 40 }} />
+                <Text style={styles.headerTitle}>Notificações</Text>
+                <TouchableOpacity onPress={() => load(true)} style={styles.backBtn} accessibilityLabel="Actualizar">
+                    <RefreshCw size={18} color={Theme.colors.primary} />
+                </TouchableOpacity>
             </View>
 
-            {MOCK_NOTIFS.length === 0 ? (
-                <View style={styles.empty}>
-                    <Bell size={48} color={Theme.colors.borderStrong} style={{ marginBottom: 16 }} />
-                    <Text style={styles.emptyTitle}>Sem notificações</Text>
-                    <Text style={styles.emptyText}>As tuas notificações aparecerão aqui.</Text>
+            {/* Content */}
+            {isLoading ? (
+                <View style={styles.centered}>
+                    <ActivityIndicator size="large" color={Theme.colors.primary} />
+                    <Text style={styles.loadingText}>A carregar lembretes...</Text>
+                </View>
+            ) : error ? (
+                <View style={styles.centered}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity onPress={() => load()} style={styles.retryBtn}>
+                        <Text style={styles.retryText}>Tentar novamente</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList
-                    data={MOCK_NOTIFS}
+                    data={reminders}
                     keyExtractor={item => item.id}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.list}
+                    renderItem={({ item }) => <ReminderCard item={item} />}
+                    contentContainerStyle={[styles.list, reminders.length === 0 && styles.listEmpty]}
+                    ListEmptyComponent={renderEmpty}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={() => load(true)}
+                            colors={[Theme.colors.primary]}
+                            tintColor={Theme.colors.primary}
+                        />
+                    }
+                    ListHeaderComponent={reminders.length > 0 ? (
+                        <Text style={styles.sectionTitle}>{reminders.length} lembrete(s) activo(s)</Text>
+                    ) : null}
                 />
             )}
         </View>
@@ -67,26 +170,49 @@ export const NotificationsScreen = () => {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: Theme.colors.background },
     header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14,
-        backgroundColor: Theme.colors.surfaceElevated, borderBottomWidth: 1, borderBottomColor: Theme.colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: 56,
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Theme.colors.border,
     },
-    backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: Theme.colors.surface, justifyContent: 'center', alignItems: 'center' },
-    title: { ...T.h3, color: Theme.colors.primary },
-    list: { padding: 16 },
+    headerTitle: { fontSize: 18, fontWeight: '800', color: Theme.colors.text, fontFamily: T.bold },
+    backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    list: { paddingHorizontal: 16, paddingBottom: 80, paddingTop: 12 },
+    listEmpty: { flexGrow: 1 },
+    sectionTitle: { fontSize: 11, fontWeight: '700', color: Theme.colors.textTertiary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
     card: {
-        flexDirection: 'row', backgroundColor: Theme.colors.surfaceElevated, borderRadius: Theme.radius.lg, padding: 14,
-        marginBottom: 10, ...Theme.elevation.xs, alignItems: 'center',
+        flexDirection: 'row',
+        backgroundColor: Theme.colors.card,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: Theme.colors.border,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    cardUnread: { backgroundColor: Theme.colors.primaryGhost, borderWidth: 1, borderColor: Theme.colors.primary },
-    iconBox: { width: 44, height: 44, borderRadius: 22, backgroundColor: Theme.colors.surface, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-    textContainer: { flex: 1 },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    titleText: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: Theme.colors.textPrimary },
-    titleUnread: { color: Theme.colors.primary, fontFamily: 'Poppins_600SemiBold' },
-    timeText: { ...T.bodySmall, fontSize: 11 },
-    descText: { ...T.bodySmall, lineHeight: 18 },
-    empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-    emptyTitle: { ...T.h3, marginBottom: 8 },
-    emptyText: { ...T.body, color: Theme.colors.textSecondary, textAlign: 'center' },
+    cardLeft: { width: 44, height: 44, borderRadius: 22, backgroundColor: Theme.colors.primaryGhost, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+    eventIcon: { fontSize: 22 },
+    cardContent: { flex: 1 },
+    cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    eventName: { fontSize: 14, fontWeight: '700', color: Theme.colors.text, flex: 1, marginRight: 8, fontFamily: T.semibold },
+    badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
+    badgeText: { fontSize: 10, fontWeight: '700' },
+    cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+    metaText: { fontSize: 11, color: Theme.colors.textTertiary },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+    loadingText: { marginTop: 12, fontSize: 14, color: Theme.colors.textTertiary },
+    errorText: { fontSize: 14, color: Theme.colors.error, textAlign: 'center', marginBottom: 16 },
+    retryBtn: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Theme.colors.primaryGhost, borderRadius: 12 },
+    retryText: { fontSize: 14, fontWeight: '700', color: Theme.colors.primary },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, marginTop: 60 },
+    emptyTitle: { fontSize: 18, fontWeight: '800', color: Theme.colors.text, marginTop: 20, marginBottom: 8 },
+    emptyText: { fontSize: 13, color: Theme.colors.textTertiary, textAlign: 'center', lineHeight: 20 },
 });
