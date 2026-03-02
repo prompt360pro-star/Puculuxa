@@ -1,112 +1,139 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    TextInput,
-    TouchableOpacity,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
-    Alert,
-    ActivityIndicator,
-    Image
+    Image,
+    Animated,
+    Dimensions,
+    TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogIn, Mail, Lock, ArrowRight } from 'lucide-react-native';
-import { Theme } from '../theme';
+import { Mail, Lock } from 'lucide-react-native';
+import { Theme, T } from '../theme';
 import { useAuthStore } from '../store/authStore';
+import { useToastStore } from '../store/toastStore';
+import { PremiumButton } from '../components/ui/PremiumButton';
+import { PremiumInput } from '../components/ui/PremiumInput';
+import { humanizeError } from '../utils/errorMessages';
+
+const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const { login, loading } = useAuthStore();
+    const { show } = useToastStore();
+    const shakeAnim = useRef(new Animated.Value(0)).current;
+
+    const triggerShake = () => {
+        Animated.sequence([
+            Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: 8, duration: 60, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
+            Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+        ]).start();
+    };
 
     const handleLogin = async () => {
-        if (!email || !password) {
-            Alert.alert('Erro', 'Por favor, preencha todos os campos.');
+        if (!email.trim() || !password.trim()) {
+            show({ type: 'warning', message: 'Preenche todos os campos.' });
             return;
         }
 
         try {
-            await login(email, password);
-            // O estado global será atualizado e a navegação deve reagir no App.js
+            await login(email.trim(), password);
         } catch (error) {
-            Alert.alert('Erro de Login', error.message || 'Verifique suas credenciais.');
+            triggerShake();
+            show({ type: 'error', message: humanizeError(error) });
         }
     };
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.container}
-        >
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.header}>
-                    <View style={styles.logoCircle}>
-                        <Image source={require('../../assets/logo.jpeg')} style={styles.logoImage} />
-                    </View>
-                    <Text style={styles.title}>Bem-vindo de volta!</Text>
-                    <Text style={styles.subtitle}>Acesse sua conta para gerenciar seus pedidos e orçamentos.</Text>
-                </View>
+        <View style={styles.container}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+            >
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Header */}
+                    <LinearGradient
+                        colors={[Theme.colors.gradientStart, Theme.colors.gradientMid, Theme.colors.gradientEnd]}
+                        style={styles.header}
+                    >
+                        <View style={styles.logoCircle}>
+                            <Image source={require('../../assets/logo.jpeg')} style={styles.logoImage} />
+                        </View>
+                        <Text style={styles.brand}>Puculuxa</Text>
+                        <Text style={styles.tagline}>O sabor que cria memórias</Text>
+                    </LinearGradient>
 
-                <View style={styles.form}>
-                    <View style={styles.inputContainer}>
-                        <Mail size={20} color={Theme.colors.textSecondary} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="E-mail"
+                    {/* Form Card */}
+                    <View style={styles.card}>
+                        <Text style={styles.cardTitle}>Entrar na tua conta</Text>
+
+                        <PremiumInput
+                            label="E-mail"
                             value={email}
                             onChangeText={setEmail}
+                            placeholder="nome@exemplo.com"
                             keyboardType="email-address"
                             autoCapitalize="none"
+                            autoComplete="email"
+                            icon={<Mail />}
                         />
-                    </View>
 
-                    <View style={styles.inputContainer}>
-                        <Lock size={20} color={Theme.colors.textSecondary} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Senha"
+                        <PremiumInput
+                            label="Password"
                             value={password}
                             onChangeText={setPassword}
+                            placeholder="A tua password"
                             secureTextEntry
+                            autoComplete="password"
+                            icon={<Lock />}
                         />
+
+                        <TouchableOpacity
+                            style={styles.forgotLink}
+                            accessibilityRole="link"
+                            accessibilityLabel="Esqueceste a password?"
+                        >
+                            <Text style={styles.forgotText}>Esqueceste a password?</Text>
+                        </TouchableOpacity>
+
+                        <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+                            <PremiumButton
+                                title="Entrar"
+                                onPress={handleLogin}
+                                variant="primary"
+                                size="lg"
+                                loading={loading}
+                            />
+                        </Animated.View>
                     </View>
 
-                    <TouchableOpacity
-                        style={styles.button}
-                        onPress={handleLogin}
-                        disabled={loading}
-                    >
-                        <LinearGradient
-                            colors={[Theme.colors.primary, Theme.colors.secondary]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.gradient}
+                    {/* Register link */}
+                    <View style={styles.registerRow}>
+                        <Text style={styles.registerText}>Ainda não tens conta? </Text>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Register')}
+                            accessibilityRole="link"
+                            accessibilityLabel="Criar conta"
                         >
-                            {loading ? (
-                                <ActivityIndicator color="#FFF" />
-                            ) : (
-                                <View style={styles.buttonContent}>
-                                    <Text style={styles.buttonText}>Entrar</Text>
-                                    <ArrowRight size={20} color="#FFF" />
-                                </View>
-                            )}
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.registerLink}
-                        onPress={() => navigation.navigate('Register')}
-                    >
-                        <Text style={styles.registerText}>
-                            Não tem uma conta? <Text style={styles.registerTextBold}>Cadastre-se</Text>
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+                            <Text style={styles.registerLink}>Criar conta</Text>
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </View>
     );
 }
 
@@ -117,88 +144,78 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        padding: Theme.spacing.xl,
-        justifyContent: 'center',
     },
     header: {
+        paddingTop: 60,
+        paddingBottom: 40,
         alignItems: 'center',
-        marginBottom: Theme.spacing.huge,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
     },
     logoCircle: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'white',
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        ...Theme.shadows.light,
-        marginBottom: Theme.spacing.lg,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: Theme.colors.primary,
-        marginBottom: Theme.spacing.xs,
-        textAlign: 'center',
-    },
-    subtitle: {
-        fontSize: 16,
-        color: Theme.colors.textSecondary,
-        textAlign: 'center',
-        paddingHorizontal: Theme.spacing.lg,
-    },
-    form: {
-        width: '100%',
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        borderRadius: Theme.radius.md,
-        marginBottom: Theme.spacing.lg,
-        paddingHorizontal: Theme.spacing.md,
-        height: 55,
-        ...Theme.shadows.light,
-    },
-    inputIcon: {
-        marginRight: Theme.spacing.md,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: Theme.colors.textPrimary,
-    },
-    button: {
-        marginTop: Theme.spacing.md,
-        borderRadius: Theme.radius.md,
         overflow: 'hidden',
-        ...Theme.shadows.medium,
+        marginBottom: 12,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    gradient: {
-        height: 55,
+    logoImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+    },
+    brand: {
+        fontFamily: 'Pacifico_400Regular',
+        fontSize: 28,
+        color: Theme.colors.white,
+        marginBottom: 4,
+    },
+    tagline: {
+        fontFamily: 'Merriweather_400Regular',
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.7)',
+        fontStyle: 'italic',
+    },
+    card: {
+        backgroundColor: Theme.colors.surfaceElevated,
+        marginHorizontal: 20,
+        marginTop: -20,
+        borderRadius: Theme.radius.xl,
+        padding: 28,
+        ...Theme.elevation.lg,
+    },
+    cardTitle: {
+        ...T.h3,
+        textAlign: 'center',
+        marginBottom: 28,
+    },
+    forgotLink: {
+        alignSelf: 'flex-end',
+        marginBottom: 24,
+        marginTop: -8,
+    },
+    forgotText: {
+        ...T.bodySmall,
+        color: Theme.colors.primary,
+    },
+    registerRow: {
+        flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    buttonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    buttonText: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginRight: Theme.spacing.sm,
-    },
-    registerLink: {
-        marginTop: Theme.spacing.xl,
-        alignItems: 'center',
+        paddingVertical: 28,
     },
     registerText: {
-        fontSize: 15,
+        ...T.body,
         color: Theme.colors.textSecondary,
     },
-    registerTextBold: {
+    registerLink: {
+        ...T.body,
+        fontFamily: 'Poppins_600SemiBold',
         color: Theme.colors.primary,
-        fontWeight: 'bold',
     },
 });

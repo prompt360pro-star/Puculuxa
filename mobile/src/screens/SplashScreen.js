@@ -1,47 +1,96 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Animated, Dimensions, Image } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, Dimensions, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Theme } from '../theme';
+import { Theme, T } from '../theme';
 
 const { width } = Dimensions.get('window');
 
 export const SplashScreen = ({ navigation }) => {
-    const fadeAnim = new Animated.Value(0);
-    const scaleAnim = new Animated.Value(0.8);
+    const logoScale = useRef(new Animated.Value(0.85)).current;
+    const logoOpacity = useRef(new Animated.Value(0)).current;
+    const subtitleOpacity = useRef(new Animated.Value(0)).current;
+    const taglineOpacity = useRef(new Animated.Value(0)).current;
+    const progressWidth = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
+        // Logo entrance — spring scale + fade
         Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 2000,
-                useNativeDriver: true,
-            }),
-            Animated.spring(scaleAnim, {
+            Animated.spring(logoScale, {
                 toValue: 1,
                 friction: 4,
                 useNativeDriver: true,
             }),
+            Animated.timing(logoOpacity, {
+                toValue: 1,
+                duration: 600,
+                useNativeDriver: true,
+            }),
         ]).start();
 
-        // Simula carregamento e navega para Login (o estado de auth do App.js redireciona para Home se logado)
+        // Subtitle delayed
+        Animated.timing(subtitleOpacity, {
+            toValue: 1,
+            duration: 500,
+            delay: 300,
+            useNativeDriver: true,
+        }).start();
+
+        // Tagline delayed
+        Animated.timing(taglineOpacity, {
+            toValue: 1,
+            duration: 500,
+            delay: 600,
+            useNativeDriver: true,
+        }).start();
+
+        // Progress bar — fill 0→100% in 2200ms
+        Animated.timing(progressWidth, {
+            toValue: 1,
+            duration: 2200,
+            delay: 400,
+            useNativeDriver: false,
+        }).start();
+
+        // Navigate after 2800ms
         const timer = setTimeout(() => {
             navigation.replace('Login');
-        }, 3000);
+        }, 2800);
 
         return () => clearTimeout(timer);
     }, []);
 
+    const barWidth = progressWidth.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0%', '100%'],
+    });
+
     return (
         <LinearGradient
-            colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]}
+            colors={[Theme.colors.gradientStart, Theme.colors.gradientMid, Theme.colors.gradientEnd]}
             style={styles.container}
         >
-            <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-                {/* Usaremos um placeholder visual até termos o arquivo do logo */}
-                <View style={styles.placeholderLogo}>
+            {/* Logo + Brand */}
+            <Animated.View style={[styles.logoContainer, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+                <View style={styles.logoCircle}>
                     <Image source={require('../../assets/logo.jpeg')} style={styles.logoImage} />
                 </View>
+                <Text style={styles.brand}>Puculuxa</Text>
             </Animated.View>
+
+            {/* Subtitle */}
+            <Animated.Text style={[styles.subtitle, { opacity: subtitleOpacity }]}>
+                Cakes & Catering
+            </Animated.Text>
+
+            {/* Tagline */}
+            <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+                Cada momento merece ser doce.
+            </Animated.Text>
+
+            {/* Progress bar */}
+            <View style={styles.progressTrack}>
+                <Animated.View style={[styles.progressFill, { width: barWidth }]} />
+            </View>
         </LinearGradient>
     );
 };
@@ -51,27 +100,65 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: 40,
     },
     logoContainer: {
         alignItems: 'center',
-        justifyContent: 'center',
+        marginBottom: 12,
     },
-    placeholderLogo: {
-        width: width * 0.5,
-        height: width * 0.5,
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        borderRadius: Theme.radius.full,
-        padding: Theme.spacing.lg,
-        borderColor: 'white',
-        borderStyle: 'dotted',
+    logoCircle: {
+        width: width * 0.28,
+        height: width * 0.28,
+        borderRadius: width * 0.14,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
         overflow: 'hidden',
+        marginBottom: 16,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
     logoImage: {
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
-        borderRadius: Theme.radius.full,
-    }
+    },
+    brand: {
+        fontFamily: 'Pacifico_400Regular',
+        fontSize: 40,
+        color: Theme.colors.white,
+        textShadowColor: 'rgba(0,0,0,0.2)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 8,
+    },
+    subtitle: {
+        fontFamily: 'Poppins_500Medium',
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.85)',
+        letterSpacing: 2,
+        textTransform: 'uppercase',
+        marginTop: 4,
+    },
+    tagline: {
+        fontFamily: 'Merriweather_400Regular',
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.65)',
+        fontStyle: 'italic',
+        marginTop: 12,
+    },
+    progressTrack: {
+        position: 'absolute',
+        bottom: 80,
+        left: 60,
+        right: 60,
+        height: 1.5,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 1,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: 'rgba(255,255,255,0.6)',
+        borderRadius: 1,
+    },
 });

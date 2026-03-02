@@ -1,301 +1,166 @@
-import React from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TouchableOpacity,
-    Image,
-    Dimensions,
-    Share,
-    Alert,
-    TextInput
+    View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+    Dimensions, Animated, Share, StatusBar,
 } from 'react-native';
-import { ArrowLeft, Heart, Share2, Star, UtensilsCrossed, Tag, Info } from 'lucide-react-native';
-import { Theme } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ChevronLeft, Heart, Share2, Star, ShoppingCart, UtensilsCrossed } from 'lucide-react-native';
+import { Theme, T } from '../theme';
 import { useFavoritesStore } from '../store/favoritesStore';
 import { useCartStore } from '../store/cartStore';
-import { useAuthStore } from '../store/authStore';
-import { ShoppingCart } from 'lucide-react-native';
+import { useToastStore } from '../store/toastStore';
+import { PremiumButton } from '../components/ui/PremiumButton';
+import { formatKz } from '../utils/errorMessages';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const HERO_HEIGHT = height * 0.45;
 
-const MOCK_REVIEWS = [
-    { id: 1, name: 'Ana Silva', rating: 5, text: 'Bolo excelente, extremamente húmido e a decoração estava absolutamente impecável! Recomendo a 100%.', date: '12 Out 2023' },
-    { id: 2, name: 'Pedro Miguel', rating: 4, text: 'Os salgados estavam bons e chegaram bem quentinhos para a festa.', date: '05 Set 2023' },
-];
-
-const MOCK_RELATED = [
-    { id: '101', name: 'Cupcakes Decorados (Cx 6)', price: 12000, image: 'https://images.unsplash.com/photo-1576618148400-f54bed99fcfd' },
-    { id: '102', name: 'Tartelete de Frutas', price: 8500, image: 'https://images.unsplash.com/photo-1519869325930-281384150729' },
-    { id: '103', name: 'Kit Salgados Sortidos', price: 15000, image: null },
-];
-
-export const ProductDetailScreen = ({ route }) => {
-    const navigation = useNavigation();
-    const { product } = route.params || {};
+export const ProductDetailScreen = ({ route, navigation }) => {
+    const { product } = route.params;
     const { toggle, isFavorite } = useFavoritesStore();
-    const faved = product ? isFavorite(product.id) : false;
-    const { user } = useAuthStore();
-
-    const [reviewText, setReviewText] = React.useState('');
-    const [mockReviews, setMockReviews] = React.useState([
-        { id: 1, name: 'Ana Silva', rating: 5, text: 'Bolo excelente, extremamente húmido!', date: '12 Out 2023' }
-    ]);
-
-    const handleAddReview = () => {
-        if (!reviewText.trim()) return;
-        setMockReviews([{
-            id: Date.now(),
-            name: user?.name || 'Visitante',
-            rating: 5,
-            text: reviewText,
-            date: new Date().toLocaleDateString('pt-BR')
-        }, ...mockReviews]);
-        setReviewText('');
-        Alert.alert('Avaliação Submetida', 'Obrigado pelo seu feedback!');
-    };
-
-    if (!product) {
-        return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorIcon}>😕</Text>
-                <Text style={styles.errorText}>Produto não encontrado.</Text>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Text style={styles.backBtnText}>Voltar</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
-
-    const handleShare = async () => {
-        try {
-            await Share.share({
-                message: `🎂 Olha este produto incrível no Puculuxa!\n\n${product.name}\nA partir de Kz ${Number(product.price || 0).toLocaleString('pt-BR')}\n\nBaixe o app e peça já o seu orçamento!`,
-            });
-        } catch {
-            Alert.alert('Erro', 'Não foi possível partilhar.');
-        }
-    };
-
-    const handleQuote = () => {
-        navigation.navigate('Quotation');
-    };
-
     const { addItem } = useCartStore();
+    const { show } = useToastStore();
+    const faved = isFavorite(product.id);
+    const [imageError, setImageError] = useState(false);
+    const heartScale = useRef(new Animated.Value(1)).current;
+    const scrollY = useRef(new Animated.Value(0)).current;
 
-    const handleAddToCart = () => {
+    const handleFav = useCallback(() => {
+        Animated.sequence([
+            Animated.timing(heartScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+            Animated.timing(heartScale, { toValue: 1, duration: 100, useNativeDriver: true }),
+        ]).start();
+        toggle(product);
+        show({ type: faved ? 'info' : 'brand', message: faved ? 'Removido dos favoritos' : 'Adicionado aos favoritos ❤️' });
+    }, [product, faved]);
+
+    const handleAddToCart = useCallback(() => {
         addItem(product);
-        Alert.alert('Sucesso', 'Adicionado ao carrinho!', [
-            { text: 'Ir para o carrinho', onPress: () => navigation.navigate('Cart') },
-            { text: 'Continuar compras', style: 'cancel' }
-        ]);
-    };
+        show({ type: 'success', message: `${product.name} adicionado ao carrinho!` });
+    }, [product]);
+
+    const handleShare = useCallback(async () => {
+        try {
+            await Share.share({ message: `Vê este produto da Puculuxa: ${product.name} — ${formatKz(product.price)}` });
+        } catch { }
+    }, [product]);
+
+    const headerOpacity = scrollY.interpolate({
+        inputRange: [0, HERO_HEIGHT - 120],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+    });
 
     return (
         <View style={styles.container}>
-            {/* Hero Image */}
-            <View style={styles.imageWrapper}>
-                {product.image ? (
-                    <Image source={{ uri: product.image }} style={styles.heroImage} resizeMode="cover" />
+            <StatusBar barStyle="light-content" />
+
+            {/* Animated header bg */}
+            <Animated.View style={[styles.headerBg, { opacity: headerOpacity }]} />
+
+            {/* Nav bar */}
+            <View style={styles.navBar}>
+                <TouchableOpacity style={styles.navBtn} onPress={() => navigation.goBack()} accessibilityLabel="Voltar">
+                    <ChevronLeft size={22} color={Theme.colors.white} />
+                </TouchableOpacity>
+                <View style={styles.navRight}>
+                    <TouchableOpacity style={styles.navBtn} onPress={handleShare} accessibilityLabel="Partilhar">
+                        <Share2 size={18} color={Theme.colors.white} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navBtn} onPress={handleFav} accessibilityLabel={faved ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}>
+                        <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                            <Heart size={18} color={faved ? '#E57373' : Theme.colors.white} fill={faved ? '#E57373' : 'transparent'} />
+                        </Animated.View>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <Animated.ScrollView
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+                scrollEventThrottle={16}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Hero Image */}
+                {product.image && !imageError ? (
+                    <Image source={{ uri: product.image }} style={styles.heroImage} onError={() => setImageError(true)} />
                 ) : (
-                    <View style={[styles.heroImage, styles.placeholderImage]}>
-                        <Image source={require('../../assets/logo.jpeg')} style={{ width: 100, height: 100, opacity: 0.3 }} />
+                    <View style={[styles.heroImage, styles.heroPlaceholder]}>
+                        <Text style={{ fontSize: 72 }}>🎂</Text>
                     </View>
                 )}
                 <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.55)']}
-                    style={styles.imageOverlay}
+                    colors={['transparent', 'rgba(255,254,247,0.6)', Theme.colors.background]}
+                    style={styles.heroOverlay}
                 />
-                {/* Overlay Action Bar */}
-                <View style={styles.topBar}>
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
-                        <ArrowLeft size={22} color="white" />
-                    </TouchableOpacity>
-                    <View style={styles.topBarRight}>
-                        <TouchableOpacity style={styles.iconBtn} onPress={handleShare}>
-                            <Share2 size={20} color="white" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.iconBtn, faved && styles.iconBtnActive]}
-                            onPress={() => toggle(product)}
-                        >
-                            <Heart size={20} color={faved ? '#E57373' : 'white'} fill={faved ? '#E57373' : 'transparent'} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                {product.category ? (
-                    <View style={styles.categoryBadge}>
-                        <Tag size={12} color={Theme.colors.primary} />
-                        <Text style={styles.categoryText}>{product.category}</Text>
-                    </View>
-                ) : null}
-            </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Product Name + Price */}
-                <View style={styles.header}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.productName}>{product.name}</Text>
-                        <View style={styles.ratingRow}>
-                            {[1, 2, 3, 4, 5].map(i => (
-                                <Star key={i} size={14} color={i <= 4 ? Theme.colors.primary : '#ddd'} fill={i <= 4 ? Theme.colors.primary : '#ddd'} />
-                            ))}
-                            <Text style={styles.ratingText}> 4.8 (47 avaliações)</Text>
+                {/* Content Card */}
+                <View style={styles.content}>
+                    {/* Category pill */}
+                    {product.category ? (
+                        <View style={styles.categoryPill}>
+                            <Text style={styles.categoryText}>{product.category}</Text>
                         </View>
-                    </View>
-                    <View style={styles.priceTag}>
-                        <Text style={styles.priceLabel}>A partir de</Text>
-                        <Text style={styles.priceValue}>
-                            Kz {product.price ? Number(product.price).toLocaleString('pt-BR') : '—'}
-                        </Text>
-                    </View>
-                </View>
+                    ) : null}
 
-                {/* Description */}
-                {product.description ? (
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Info size={16} color={Theme.colors.textSecondary} />
+                    <Text style={styles.productName}>{product.name}</Text>
+
+                    {/* Price */}
+                    <Text style={styles.productPrice}>
+                        {product.price ? formatKz(product.price) : 'Sob consulta'}
+                    </Text>
+
+                    {/* Description */}
+                    {product.description ? (
+                        <View style={styles.section}>
                             <Text style={styles.sectionTitle}>Descrição</Text>
+                            <Text style={styles.description}>{product.description}</Text>
                         </View>
-                        <Text style={styles.descriptionText}>{product.description}</Text>
-                    </View>
-                ) : null}
+                    ) : null}
 
-                {/* Details */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <UtensilsCrossed size={16} color={Theme.colors.textSecondary} />
-                        <Text style={styles.sectionTitle}>Detalhes</Text>
-                    </View>
+                    {/* Details Grid */}
                     <View style={styles.detailsGrid}>
-                        <View style={styles.detailItem}>
-                            <Text style={styles.detailIcon}>📦</Text>
-                            <Text style={styles.detailLabel}>Disponibilidade</Text>
-                            <Text style={styles.detailValue}>Sob Encomenda</Text>
-                        </View>
-                        <View style={styles.detailItem}>
-                            <Text style={styles.detailIcon}>⏱</Text>
-                            <Text style={styles.detailLabel}>Prazo</Text>
-                            <Text style={styles.detailValue}>3–5 dias úteis</Text>
-                        </View>
-                        <View style={styles.detailItem}>
-                            <Text style={styles.detailIcon}>🎁</Text>
-                            <Text style={styles.detailLabel}>Personalização</Text>
-                            <Text style={styles.detailValue}>Incluída</Text>
-                        </View>
-                        <View style={styles.detailItem}>
-                            <Text style={styles.detailIcon}>🌍</Text>
-                            <Text style={styles.detailLabel}>Entrega</Text>
-                            <Text style={styles.detailValue}>Luanda Central</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Avaliações */}
-                <View style={[styles.section, { paddingBottom: 0 }]}>
-                    <View style={styles.sectionHeader}>
-                        <Star size={16} color={Theme.colors.textSecondary} />
-                        <Text style={styles.sectionTitle}>Avaliações Recentes</Text>
-                    </View>
-                    {mockReviews.map(r => (
-                        <View key={r.id} style={styles.reviewCard}>
-                            <View style={styles.reviewHeader}>
-                                <Text style={styles.reviewName}>{r.name}</Text>
-                                <Text style={styles.reviewDate}>{r.date}</Text>
+                        {product.servings ? (
+                            <View style={styles.detailItem}>
+                                <Text style={styles.detailValue}>{product.servings}</Text>
+                                <Text style={styles.detailLabel}>Porções</Text>
                             </View>
-                            <View style={styles.reviewStars}>
-                                {[1, 2, 3, 4, 5].map(i => (
-                                    <Star key={i} size={12} color={i <= r.rating ? Theme.colors.primary : '#ddd'} fill={i <= r.rating ? Theme.colors.primary : '#ddd'} />
-                                ))}
+                        ) : null}
+                        {product.preparationTime ? (
+                            <View style={styles.detailItem}>
+                                <Text style={styles.detailValue}>{product.preparationTime}</Text>
+                                <Text style={styles.detailLabel}>Preparação</Text>
                             </View>
-                            <Text style={styles.reviewText}>{r.text}</Text>
-                        </View>
-                    ))}
-
-                    {/* Add Review Box */}
-                    <View style={styles.addReviewBox}>
-                        <Text style={styles.addReviewTitle}>Deixar Avaliação como <Text style={{ fontWeight: 'bold' }}>{user?.name || 'Visitante'}</Text></Text>
-                        <TextInput
-                            style={styles.reviewInput}
-                            placeholder="Escreva a sua avaliação..."
-                            placeholderTextColor="#999"
-                            multiline
-                            value={reviewText}
-                            onChangeText={setReviewText}
-                        />
-                        <TouchableOpacity style={styles.submitReviewBtn} onPress={handleAddReview}>
-                            <Text style={styles.submitReviewText}>Enviar</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Relacionados */}
-                <View style={[styles.section, { paddingBottom: 0, marginTop: 16 }]}>
-                    <View style={styles.sectionHeader}>
-                        <Heart size={16} color={Theme.colors.textSecondary} />
-                        <Text style={styles.sectionTitle}>Recomendados para si</Text>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.relatedScroll}>
-                        {MOCK_RELATED.map(rel => (
-                            <TouchableOpacity
-                                key={rel.id}
-                                style={styles.relatedCard}
-                                onPress={() => navigation.push('ProductDetail', { product: rel })}
-                                activeOpacity={0.8}
-                            >
-                                {rel.image ? (
-                                    <Image source={{ uri: rel.image }} style={styles.relatedImage} />
-                                ) : (
-                                    <View style={[styles.relatedImage, { backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Text style={{ fontSize: 24 }}>🧁</Text>
-                                    </View>
-                                )}
-                                <View style={styles.relatedInfo}>
-                                    <Text style={styles.relatedName} numberOfLines={2}>{rel.name}</Text>
-                                    <Text style={styles.relatedPrice}>Kz {rel.price.toLocaleString('pt-BR')}</Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                <View style={{ height: 120 }} />
-            </ScrollView>
-
-            {/* Bottom CTA */}
-            <View style={styles.footer}>
-                {product.price ? (
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <TouchableOpacity style={[styles.quoteButton, { flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: Theme.colors.primary }]} onPress={handleQuote} activeOpacity={0.85}>
-                            <View style={[styles.quoteGradient, { backgroundColor: 'transparent' }]}>
-                                <Text style={[styles.quoteText, { color: Theme.colors.primary, fontSize: 13 }]}>ORÇAMENTO</Text>
+                        ) : null}
+                        {product.weight ? (
+                            <View style={styles.detailItem}>
+                                <Text style={styles.detailValue}>{product.weight}</Text>
+                                <Text style={styles.detailLabel}>Peso</Text>
                             </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.quoteButton, { flex: 1 }]} onPress={handleAddToCart} activeOpacity={0.85}>
-                            <LinearGradient
-                                colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]}
-                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                style={styles.quoteGradient}
-                            >
-                                <ShoppingCart size={20} color="white" />
-                                <Text style={[styles.quoteText, { fontSize: 13 }]}>ADICIONAR</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
+                        ) : null}
                     </View>
-                ) : (
-                    <TouchableOpacity style={styles.quoteButton} onPress={handleQuote} activeOpacity={0.85}>
-                        <LinearGradient
-                            colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                            style={styles.quoteGradient}
-                        >
-                            <UtensilsCrossed size={20} color="white" />
-                            <Text style={styles.quoteText}>PEDIR ORÇAMENTO</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
+
+                    {/* Spacer for actions */}
+                    <View style={{ height: 100 }} />
+                </View>
+            </Animated.ScrollView>
+
+            {/* Fixed action bar */}
+            <View style={styles.actionBar}>
+                <PremiumButton
+                    title="Adicionar ao Carrinho"
+                    onPress={handleAddToCart}
+                    variant="ghost"
+                    size="md"
+                    icon={<ShoppingCart size={18} color={Theme.colors.primary} />}
+                    style={{ flex: 1 }}
+                />
+                <PremiumButton
+                    title="Pedir Orçamento"
+                    onPress={() => navigation.navigate('QuotationTab')}
+                    size="md"
+                    icon={<UtensilsCrossed size={18} color={Theme.colors.white} />}
+                    style={{ flex: 1.2 }}
+                />
             </View>
         </View>
     );
@@ -303,90 +168,41 @@ export const ProductDetailScreen = ({ route }) => {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: Theme.colors.background },
-    imageWrapper: { width, height: 300, position: 'relative' },
-    heroImage: { width: '100%', height: '100%' },
-    placeholderImage: { backgroundColor: '#fef3e2', justifyContent: 'center', alignItems: 'center' },
-    placeholderEmoji: { fontSize: 64 },
-    imageOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 },
-    topBar: {
-        position: 'absolute', top: 48, left: 0, right: 0,
-        flexDirection: 'row', justifyContent: 'space-between',
-        alignItems: 'center', paddingHorizontal: Theme.spacing.xl,
+    navBar: {
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        paddingTop: 48, paddingHorizontal: 16, paddingBottom: 8,
     },
-    topBarRight: { flexDirection: 'row', gap: 8 },
-    iconBtn: {
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.35)',
-        justifyContent: 'center', alignItems: 'center',
+    headerBg: {
+        position: 'absolute', top: 0, left: 0, right: 0, height: 100, zIndex: 9,
+        backgroundColor: Theme.colors.primary,
     },
-    relatedScroll: { marginHorizontal: -24, paddingHorizontal: 24 },
-    relatedCard: { width: 140, marginRight: 16, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', ...Theme.shadows?.light, marginBottom: 8 },
-    relatedImage: { width: '100%', height: 120 },
-    relatedInfo: { padding: 12 },
-    relatedName: { fontSize: 13, fontWeight: 'bold', color: '#333', marginBottom: 4, height: 36 },
-    relatedPrice: { fontSize: 12, color: Theme.colors.primary, fontWeight: '600' },
-    iconBtnActive: { backgroundColor: 'rgba(229,115,115,0.2)' },
-    categoryBadge: {
-        position: 'absolute', bottom: 16, left: Theme.spacing.xl,
-        flexDirection: 'row', alignItems: 'center', gap: 4,
-        backgroundColor: 'white', paddingHorizontal: 12, paddingVertical: 6,
-        borderRadius: Theme.radius.full,
+    navBtn: {
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', alignItems: 'center',
     },
-    categoryText: { fontSize: 12, fontWeight: 'bold', color: Theme.colors.primary },
-    content: { flex: 1 },
-    header: {
-        flexDirection: 'row', alignItems: 'flex-start',
-        padding: Theme.spacing.xl, paddingBottom: 8,
-    },
-    productName: {
-        fontFamily: Theme.fonts.subtitle,
-        fontSize: 24, fontWeight: 'bold',
-        color: Theme.colors.accent, flex: 1,
-    },
-    ratingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-    ratingText: { fontSize: 12, color: Theme.colors.textSecondary, marginLeft: 4 },
-    priceTag: { alignItems: 'flex-end', minWidth: 100 },
-    priceLabel: { fontSize: 10, color: Theme.colors.textSecondary, fontWeight: '600', textTransform: 'uppercase' },
-    priceValue: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary, marginTop: 2 },
-    section: { paddingHorizontal: Theme.spacing.xl, paddingVertical: Theme.spacing.md },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-    sectionTitle: { fontSize: 16, fontWeight: 'bold', color: Theme.colors.accent },
-    descriptionText: { fontSize: 15, color: Theme.colors.textSecondary, lineHeight: 24 },
-    detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    detailItem: {
-        width: (width - Theme.spacing.xl * 2 - 12) / 2,
-        backgroundColor: 'white', borderRadius: Theme.radius.lg,
-        padding: 16, alignItems: 'center',
-        ...Theme.shadows.light,
-    },
-    detailIcon: { fontSize: 24, marginBottom: 8 },
-    detailLabel: { fontSize: 11, color: Theme.colors.textSecondary, fontWeight: '600', textTransform: 'uppercase', textAlign: 'center' },
-    detailValue: { fontSize: 13, fontWeight: 'bold', color: Theme.colors.accent, marginTop: 4, textAlign: 'center' },
-    reviewCard: { backgroundColor: 'white', padding: 16, borderRadius: Theme.radius.lg, marginBottom: 12, borderWidth: 1, borderColor: '#f0f0f0' },
-    reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    reviewName: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-    reviewDate: { fontSize: 12, color: Theme.colors.textSecondary },
-    reviewStars: { flexDirection: 'row', marginBottom: 8, gap: 2 },
-    reviewText: { fontSize: 13, color: '#444', lineHeight: 20 },
-    addReviewBox: { marginTop: 16, backgroundColor: '#f9f9f9', padding: 16, borderRadius: 12 },
-    addReviewTitle: { fontSize: 13, color: '#666', marginBottom: 8 },
-    reviewInput: { backgroundColor: 'white', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#eee', minHeight: 80, textAlignVertical: 'top', color: '#333' },
-    submitReviewBtn: { backgroundColor: Theme.colors.primary, padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 12 },
-    submitReviewText: { color: 'white', fontWeight: 'bold' },
-    footer: {
+    navRight: { flexDirection: 'row', gap: 10 },
+    heroImage: { width, height: HERO_HEIGHT },
+    heroPlaceholder: { backgroundColor: Theme.colors.surface, justifyContent: 'center', alignItems: 'center' },
+    heroOverlay: { position: 'absolute', top: HERO_HEIGHT - 80, left: 0, right: 0, height: 80 },
+    content: { paddingHorizontal: 20, marginTop: -24, backgroundColor: Theme.colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+    categoryPill: { alignSelf: 'flex-start', backgroundColor: Theme.colors.primaryGhost, paddingHorizontal: 12, paddingVertical: 4, borderRadius: Theme.radius.full, marginBottom: 10, marginTop: 20 },
+    categoryText: { ...T.label, color: Theme.colors.primary },
+    productName: { ...T.h1, marginBottom: 8 },
+    productPrice: { ...T.priceLarge, marginBottom: 20 },
+    section: { marginBottom: 20 },
+    sectionTitle: { ...T.h3, marginBottom: 8 },
+    description: { ...T.body, lineHeight: 24 },
+    detailsGrid: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+    detailItem: { flex: 1, backgroundColor: Theme.colors.surfaceElevated, borderRadius: Theme.radius.md, padding: 14, alignItems: 'center', ...Theme.elevation.xs },
+    detailValue: { fontFamily: 'Merriweather_700Bold', fontSize: 18, color: Theme.colors.primary, marginBottom: 4 },
+    detailLabel: { ...T.bodySmall },
+    actionBar: {
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: Theme.spacing.xl, paddingBottom: 40,
-        backgroundColor: 'white', borderTopWidth: 1, borderTopColor: Theme.colors.surface,
+        flexDirection: 'row', gap: 10,
+        paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 28,
+        backgroundColor: Theme.colors.surfaceElevated,
+        borderTopWidth: 1, borderTopColor: Theme.colors.border,
+        ...Theme.elevation.lg,
     },
-    quoteButton: { borderRadius: Theme.radius.full, overflow: 'hidden', ...Theme.shadows.medium },
-    quoteGradient: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: 12, paddingVertical: 18,
-    },
-    quoteText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-    errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-    errorIcon: { fontSize: 48, marginBottom: 12 },
-    errorText: { fontSize: 18, color: Theme.colors.textSecondary, marginBottom: 20 },
-    backBtn: { backgroundColor: Theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: Theme.radius.full },
-    backBtnText: { color: 'white', fontWeight: 'bold' },
 });

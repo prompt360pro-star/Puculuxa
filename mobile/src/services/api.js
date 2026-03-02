@@ -4,6 +4,27 @@ import { API_CONFIG } from '../config/api.config';
 
 const BASE_URL = API_CONFIG.BASE_URL;
 
+/**
+ * Retry automático com backoff exponencial.
+ * Só para erros de rede e 5xx — nunca para 4xx (erro do cliente).
+ */
+const fetchWithRetry = async (url, options, retries = 3, delay = 800) => {
+    try {
+        const response = await fetch(url, options);
+        if (response.status >= 500 && retries > 0) {
+            await new Promise(r => setTimeout(r, delay));
+            return fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+        return response;
+    } catch (err) {
+        if (retries > 0) {
+            await new Promise(r => setTimeout(r, delay));
+            return fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+        throw err;
+    }
+};
+
 const getHeaders = async () => {
     const token = await AsyncStorage.getItem('puculuxa_token');
     return {

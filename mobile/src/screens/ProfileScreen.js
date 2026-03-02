@@ -1,261 +1,162 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
-import { Settings, Heart, History, LogOut, ChevronRight, Crown, TrendingUp, ShoppingBag } from 'lucide-react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Theme } from '../theme';
+import React, { useMemo } from 'react';
+import {
+    View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Settings, Heart, Bell, HelpCircle, LogOut, ChevronRight, ClipboardList, Star, Package } from 'lucide-react-native';
+import { Theme, T } from '../theme';
 import { useAuthStore } from '../store/authStore';
-import { BottomNav } from '../components/ui/BottomNav';
+import { useToastStore } from '../store/toastStore';
 
-export const ProfileScreen = () => {
+// Badge de lealdade
+function getLoyaltyBadge(orderCount) {
+    if (orderCount >= 10) return { emoji: '💎', label: 'Diamante', color: '#B388FF' };
+    if (orderCount >= 5) return { emoji: '⭐', label: 'Estrela', color: '#FFD700' };
+    return { emoji: '🌱', label: 'Novo', color: Theme.colors.secondary };
+}
+
+const MenuItem = ({ icon: IconComp, label, onPress, color, badge }) => (
+    <TouchableOpacity
+        style={mi.container}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+    >
+        <View style={[mi.iconWrap, { backgroundColor: color || Theme.colors.primaryGhost }]}>
+            <IconComp size={18} color={color ? Theme.colors.white : Theme.colors.primary} />
+        </View>
+        <Text style={mi.label}>{label}</Text>
+        <View style={{ flex: 1 }} />
+        {badge ? <View style={mi.badge}><Text style={mi.badgeText}>{badge}</Text></View> : null}
+        <ChevronRight size={16} color={Theme.colors.textTertiary} />
+    </TouchableOpacity>
+);
+
+const mi = StyleSheet.create({
+    container: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 4 },
+    iconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    label: { ...T.body, fontFamily: 'Poppins_500Medium' },
+    badge: { backgroundColor: Theme.colors.primaryGhost, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Theme.radius.full, marginRight: 8 },
+    badgeText: { fontFamily: T.bodySmall.fontFamily, fontSize: 11, color: Theme.colors.primary },
+});
+
+export const ProfileScreen = ({ navigation }) => {
     const { user, logout } = useAuthStore();
-    const navigation = useNavigation();
-    const [stats, setStats] = React.useState({ totalSpent: 125000, orders: 4, tier: 'GOLD', loyaltyPoints: 1250 });
+    const { show } = useToastStore();
 
-    // Mock refreshing stats when screen focuses
-    useFocusEffect(
-        React.useCallback(() => {
-            // In a real scenario: ApiService.getUserStats().then(setStats)
-        }, [])
-    );
+    const initials = useMemo(() => {
+        if (!user?.name) return '?';
+        return user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    }, [user?.name]);
 
-    const handleLogout = () => {
-        Alert.alert('Sair', 'Tem certeza que deseja sair?', [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Sim', onPress: logout }
-        ]);
-    };
+    const loyalty = getLoyaltyBadge(user?.orderCount || 0);
 
-    const getUserInitials = () => {
-        if (!user || !user.name) return '??';
-        const parts = user.name.split(' ');
-        if (parts.length > 1) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        return parts[0].substring(0, 2).toUpperCase();
+    const handleLogout = async () => {
+        await logout();
+        show({ type: 'info', message: 'Sessão terminada.' });
     };
 
     return (
-        <View style={styles.container}>
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                <View style={styles.header}>
-                    <View style={styles.avatarContainer}>
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                        </View>
-                    </View>
-                    <Text style={styles.userName}>{user?.name || 'Visitante'}</Text>
-                    <Text style={styles.userEmail}>{user?.email || 'Nenhum e-mail vinculado'}</Text>
-
-                    <View style={styles.tierBadge}>
-                        <Crown size={16} color="#D4AF37" />
-                        <Text style={styles.tierText}>Membro {stats.tier}</Text>
-                    </View>
+        <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Header */}
+            <LinearGradient
+                colors={[Theme.colors.gradientStart, Theme.colors.gradientMid, Theme.colors.gradientEnd]}
+                style={styles.header}
+            >
+                <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{initials}</Text>
                 </View>
-
-                {/* Dashboard Stats */}
-                <View style={styles.statsContainer}>
-                    <View style={styles.statCard}>
-                        <TrendingUp size={24} color={Theme.colors.primary} />
-                        <Text style={styles.statValue}>Kz {stats.totalSpent.toLocaleString('pt-BR')}</Text>
-                        <Text style={styles.statLabel}>Valor Investido</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <ShoppingBag size={24} color="#4CAF50" />
-                        <Text style={styles.statValue}>{stats.orders}</Text>
-                        <Text style={styles.statLabel}>Pedidos Realizados</Text>
-                    </View>
+                <Text style={styles.userName}>{user?.name || 'Utilizador'}</Text>
+                <Text style={styles.userEmail}>{user?.email || ''}</Text>
+                <View style={styles.loyaltyBadge}>
+                    <Text style={{ fontSize: 14 }}>{loyalty.emoji}</Text>
+                    <Text style={[styles.loyaltyText, { color: loyalty.color }]}>{loyalty.label}</Text>
                 </View>
+            </LinearGradient>
 
-                {/* Loyalty Points Banner */}
-                <View style={{ marginHorizontal: 20, marginBottom: 24, backgroundColor: Theme.colors.primary, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View>
-                        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600', textTransform: 'uppercase' }}>Pontos Puculuxa</Text>
-                        <Text style={{ color: 'white', fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>{stats.loyaltyPoints} pts</Text>
-                        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, marginTop: 4 }}>Equivale a Mzn/Kz {(stats.loyaltyPoints * 10).toLocaleString('pt-BR')} de desconto</Text>
-                    </View>
-                    <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 24 }}>✨</Text>
-                    </View>
+            {/* Stats */}
+            <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{user?.orderCount || 0}</Text>
+                    <Text style={styles.statLabel}>Pedidos</Text>
                 </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Minhas Atividades</Text>
-
-                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('OrderHistory')}>
-                        <View style={[styles.iconBox, { backgroundColor: Theme.colors.surface }]}>
-                            <History size={20} color={Theme.colors.primary} />
-                        </View>
-                        <Text style={styles.menuLabel}>Histórico de Pedidos</Text>
-                        <ChevronRight size={20} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Favorites')}>
-                        <View style={[styles.iconBox, { backgroundColor: '#FCE4EC' }]}>
-                            <Heart size={20} color="#F06292" />
-                        </View>
-                        <Text style={styles.menuLabel}>Meus Favoritos</Text>
-                        <ChevronRight size={20} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{user?.quotationCount || 0}</Text>
+                    <Text style={styles.statLabel}>Orçamentos</Text>
                 </View>
-
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Configurações</Text>
-
-                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
-                        <View style={[styles.iconBox, { backgroundColor: '#E8E8E8' }]}>
-                            <Settings size={20} color={Theme.colors.textSecondary} />
-                        </View>
-                        <Text style={styles.menuLabel}>Editar Perfil</Text>
-                        <ChevronRight size={20} color={Theme.colors.textSecondary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-                        <View style={[styles.iconBox, { backgroundColor: '#FFEBEE' }]}>
-                            <LogOut size={20} color="#E57373" />
-                        </View>
-                        <Text style={styles.menuLabel}>Sair da Conta</Text>
-                    </TouchableOpacity>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                    <Text style={styles.statValue}>{loyalty.emoji}</Text>
+                    <Text style={styles.statLabel}>Nível</Text>
                 </View>
+            </View>
 
-                <View style={styles.footer}>
-                    <Text style={styles.version}>Puculuxa App v1.0.0</Text>
-                </View>
-            </ScrollView>
-            <BottomNav />
-        </View>
+            {/* Menu */}
+            <View style={styles.menuSection}>
+                <MenuItem icon={Settings} label="Editar Perfil" onPress={() => navigation.navigate('EditProfile')} />
+                <MenuItem icon={Heart} label="Favoritos" onPress={() => navigation.navigate('Favorites')} />
+                <MenuItem icon={ClipboardList} label="Histórico de Pedidos" onPress={() => navigation.navigate('OrderHistory')} />
+                <MenuItem icon={Bell} label="Notificações" onPress={() => navigation.navigate('Notifications')} />
+                <MenuItem icon={HelpCircle} label="Ajuda & Suporte" onPress={() => { }} />
+            </View>
+
+            <View style={styles.menuSection}>
+                <MenuItem icon={LogOut} label="Terminar Sessão" onPress={handleLogout} color={Theme.colors.error} />
+            </View>
+
+            <Text style={styles.version}>Puculuxa v1.0.0</Text>
+        </ScrollView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: Theme.colors.background,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingTop: 80,
-        paddingBottom: 100, // Important padding for BottomNav
-    },
+    container: { flex: 1, backgroundColor: Theme.colors.background },
+    content: { paddingBottom: 32 },
     header: {
         alignItems: 'center',
-        marginBottom: 32,
+        paddingTop: 60,
+        paddingBottom: 32,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
     },
-    avatarContainer: {
-        marginBottom: 16,
-        padding: 4,
-        backgroundColor: 'white',
-        borderRadius: 50,
-        ...Theme.shadows.light,
-    },
-    avatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: Theme.colors.primary,
+    avatarCircle: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: 'rgba(255,255,255,0.25)',
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    avatarText: {
-        fontSize: 32,
-        color: 'white',
-        fontWeight: 'bold',
-        fontFamily: Theme.fonts.title,
-    },
-    userName: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: Theme.colors.text,
-        marginBottom: 4,
-        fontFamily: Theme.fonts.subtitle,
-    },
-    userEmail: {
-        fontSize: 14,
-        color: Theme.colors.textSecondary,
-    },
-    tierBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFF8DC', // Vanilla
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        marginTop: 12,
-        borderWidth: 1,
-        borderColor: '#D4AF37'
-    },
-    tierText: {
-        marginLeft: 8,
-        color: '#D4AF37',
-        fontWeight: 'bold',
-        fontSize: 14
-    },
-    statsContainer: {
-        flexDirection: 'row',
-        paddingHorizontal: 20,
-        marginBottom: 24,
-        justifyContent: 'space-between'
-    },
-    statCard: {
-        backgroundColor: 'white',
-        flex: 1,
-        borderRadius: 16,
-        padding: 16,
-        alignItems: 'center',
-        ...Theme.shadows.light,
-        marginHorizontal: 4
-    },
-    statValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-        marginTop: 8,
-        marginBottom: 4
-    },
-    statLabel: {
-        fontSize: 12,
-        color: Theme.colors.textSecondary,
-        textAlign: 'center'
-    },
-    section: {
-        marginBottom: 24,
-        paddingHorizontal: 20,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: Theme.colors.textSecondary,
-        marginBottom: 16,
-        paddingHorizontal: 4,
-    },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 16,
         marginBottom: 12,
-        ...Theme.shadows.light,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.4)',
     },
-    iconBox: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
+    avatarText: { fontFamily: 'Merriweather_700Bold', fontSize: 24, color: Theme.colors.white },
+    userName: { fontFamily: 'Merriweather_700Bold', fontSize: 20, color: Theme.colors.white, marginBottom: 4 },
+    userEmail: { ...T.bodySmall, color: 'rgba(255,255,255,0.7)' },
+    loyaltyBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 14, paddingVertical: 5, borderRadius: Theme.radius.full },
+    loyaltyText: { fontFamily: 'Poppins_600SemiBold', fontSize: 12 },
+    statsRow: {
+        flexDirection: 'row',
+        backgroundColor: Theme.colors.surfaceElevated,
+        marginHorizontal: 20,
+        marginTop: -16,
+        borderRadius: Theme.radius.lg,
+        padding: 16,
+        ...Theme.elevation.sm,
     },
-    menuLabel: {
-        flex: 1,
-        fontSize: 16,
-        color: Theme.colors.textSecondary,
-    },
-    footer: {
-        alignItems: 'center',
+    statItem: { flex: 1, alignItems: 'center' },
+    statValue: { fontFamily: 'Merriweather_700Bold', fontSize: 20, color: Theme.colors.primary },
+    statLabel: { ...T.bodySmall, marginTop: 4 },
+    statDivider: { width: 1, backgroundColor: Theme.colors.border },
+    menuSection: {
+        backgroundColor: Theme.colors.surfaceElevated,
+        marginHorizontal: 20,
         marginTop: 20,
+        borderRadius: Theme.radius.lg,
+        paddingHorizontal: 16,
+        ...Theme.elevation.xs,
     },
-    version: {
-        fontSize: 12,
-        color: Theme.colors.textSecondary,
-        opacity: 0.5,
-    },
+    version: { ...T.bodySmall, textAlign: 'center', marginTop: 24 },
 });

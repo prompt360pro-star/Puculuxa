@@ -1,322 +1,206 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, LayoutAnimation, UIManager, Platform } from 'react-native';
-import { ChevronLeft, Package, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import {
+    View, Text, StyleSheet, FlatList, TouchableOpacity, LayoutAnimation,
+    UIManager, Platform, RefreshControl,
+} from 'react-native';
+import { ChevronLeft, ChevronDown, ChevronUp, Package, Clock, CheckCircle, Truck, XCircle } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
-import { Theme } from '../theme';
 import { ApiService } from '../services/api';
+import { Theme, T } from '../theme';
 import { Skeleton } from '../components/ui/Skeleton';
+import { PremiumButton } from '../components/ui/PremiumButton';
+import { formatKz, formatDateAO } from '../utils/errorMessages';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
+if (Platform.OS === 'android') {
+    UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
+// Status config
+const STATUS_CONFIG = {
+    PENDING: { label: 'Pendente', icon: Clock, bg: Theme.colors.warningBg, color: Theme.colors.warning },
+    CONFIRMED: { label: 'Confirmado', icon: CheckCircle, bg: Theme.colors.successBg, color: Theme.colors.success },
+    IN_PROGRESS: { label: 'Em Preparação', icon: Package, bg: Theme.colors.infoBg, color: Theme.colors.info },
+    DELIVERED: { label: 'Entregue', icon: Truck, bg: Theme.colors.successBg, color: Theme.colors.success },
+    CANCELLED: { label: 'Cancelado', icon: XCircle, bg: Theme.colors.errorBg, color: Theme.colors.error },
+};
+
+// Status pills
+const FILTER_PILLS = ['Todos', 'Pendente', 'Em Preparação', 'Entregue', 'Cancelado'];
+
 const StatusBadge = ({ status }) => {
-    let color = '#FFA000';
-    let bgColor = '#FFF8E1';
-    let label = 'Pendente';
-    let Icon = Clock;
-
-    if (status === 'DELIVERED' || status === 'COMPLETED') {
-        color = '#4CAF50';
-        bgColor = '#E8F5E9';
-        label = 'Concluído';
-        Icon = CheckCircle;
-    } else if (status === 'CANCELLED') {
-        color = '#F44336';
-        bgColor = '#FFEBEE';
-        label = 'Cancelado';
-        Icon = XCircle;
-    } else if (status === 'APPROVED' || status === 'PRODUCING' || status === 'READY') {
-        color = '#2196F3';
-        bgColor = '#E3F2FD';
-        label = 'Em Progresso';
-        Icon = Clock;
-    }
-
+    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
+    const Ic = cfg.icon;
     return (
-        <View style={[styles.badgeContainer, { backgroundColor: bgColor }]}>
-            <Icon size={12} color={color} style={{ marginRight: 4 }} />
-            <Text style={[styles.badgeText, { color }]}>{label}</Text>
+        <View style={[sb.container, { backgroundColor: cfg.bg }]}>
+            <Ic size={12} color={cfg.color} />
+            <Text style={[sb.text, { color: cfg.color }]}>{cfg.label}</Text>
         </View>
     );
 };
+const sb = StyleSheet.create({
+    container: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: Theme.radius.full },
+    text: { fontFamily: 'Poppins_600SemiBold', fontSize: 11 },
+});
 
-export const OrderHistoryScreen = () => {
+// Order Card
+const OrderCard = React.memo(({ order }) => {
+    const [expanded, setExpanded] = useState(false);
     const navigation = useNavigation();
-    const [activeTab, setActiveTab] = useState('ACTIVE'); // ACTIVE or HISTORY
-    const [expandedOrderId, setExpandedOrderId] = useState(null);
 
-    const { data: orders, isLoading, isError, refetch, isRefetching } = useQuery({
-        queryKey: ['myOrders'],
-        queryFn: ApiService.getMyOrders,
-        staleTime: 1000 * 60 * 5, // 5 minutes cache
-    });
-
-    const renderOrderItem = ({ item }) => {
-        const date = new Date(item.createdAt).toLocaleDateString('pt-BR', {
-            day: '2-digit', month: 'short', year: 'numeric'
-        });
-        const isExpanded = expandedOrderId === item.id;
-
-        const toggleExpand = () => {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            setExpandedOrderId(isExpanded ? null : item.id);
-        };
-
-        return (
-            <TouchableOpacity style={styles.orderCard} activeOpacity={0.7} onPress={toggleExpand}>
-                <View style={[styles.orderHeader, isExpanded && { borderBottomWidth: 1, borderBottomColor: '#f0f0f0', paddingBottom: 12, marginBottom: 12 }]}>
-                    <View style={styles.orderHeaderLeft}>
-                        <View style={styles.iconBox}>
-                            <Package size={20} color={Theme.colors.primary} />
-                        </View>
-                        <View>
-                            <Text style={styles.orderId}>Pedido #{item.id.slice(0, 8).toUpperCase()}</Text>
-                            <Text style={styles.orderDate}>{date}</Text>
-                        </View>
-                    </View>
-                    <StatusBadge status={item.status} />
-                </View>
-
-                {!isExpanded ? (
-                    <View style={styles.orderDetails}>
-                        <Text style={styles.orderItems}>{item.items.length} {item.items.length === 1 ? 'item' : 'itens'}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={styles.orderTotal}>Kz {item.total?.toLocaleString('pt-BR') || '0'}</Text>
-                            <ChevronDown size={16} color={Theme.colors.textSecondary} />
-                        </View>
-                    </View>
-                ) : (
-                    <View style={styles.expandedDetails}>
-                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: Theme.colors.textSecondary, marginBottom: 8, textTransform: 'uppercase' }}>Itens do Pedido</Text>
-                        {item.items.map((prod, idx) => (
-                            <View key={idx} style={styles.expandedItemRow}>
-                                <Text style={styles.expandedItemName} numberOfLines={1}>{prod.quantity}x {prod.name}</Text>
-                                <Text style={styles.expandedItemPrice}>Kz {(prod.price * prod.quantity).toLocaleString('pt-BR')}</Text>
-                            </View>
-                        ))}
-                        <View style={styles.expandedTotalRow}>
-                            <Text style={styles.expandedTotalLabel}>Total</Text>
-                            <Text style={styles.expandedTotalValue}>Kz {item.total?.toLocaleString('pt-BR') || '0'}</Text>
-                        </View>
-                        <View style={{ alignItems: 'center', marginTop: 12 }}>
-                            <ChevronUp size={16} color={Theme.colors.textSecondary} />
-                        </View>
-                    </View>
-                )}
-            </TouchableOpacity>
-        );
+    const toggleExpand = () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpanded(!expanded);
     };
 
-    const renderLoadingSkeletons = () => (
-        <View style={styles.skeletonContainer}>
-            <Skeleton width="100%" height={120} style={{ borderRadius: 20, marginBottom: 16 }} />
-            <Skeleton width="100%" height={120} style={{ borderRadius: 20, marginBottom: 16 }} />
-            <Skeleton width="100%" height={120} style={{ borderRadius: 20, marginBottom: 16 }} />
+    return (
+        <TouchableOpacity style={styles.orderCard} onPress={toggleExpand} activeOpacity={0.9} accessibilityRole="button">
+            <View style={styles.orderHeader}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.orderId}>Pedido #{order.id?.toString().slice(-6)}</Text>
+                    <Text style={styles.orderDate}>{formatDateAO(order.createdAt)}</Text>
+                </View>
+                <StatusBadge status={order.status} />
+                {expanded ? <ChevronUp size={16} color={Theme.colors.textTertiary} /> : <ChevronDown size={16} color={Theme.colors.textTertiary} />}
+            </View>
+
+            {expanded ? (
+                <View style={styles.orderExpanded}>
+                    <View style={styles.orderDetailRow}>
+                        <Text style={styles.orderDetailLabel}>Total</Text>
+                        <Text style={styles.orderDetailValue}>{formatKz(order.total)}</Text>
+                    </View>
+                    {order.items?.length > 0 ? (
+                        <View style={styles.orderDetailRow}>
+                            <Text style={styles.orderDetailLabel}>Items</Text>
+                            <Text style={styles.orderDetailValue}>{order.items.length}</Text>
+                        </View>
+                    ) : null}
+                    {order.status === 'IN_PROGRESS' || order.status === 'CONFIRMED' ? (
+                        <PremiumButton
+                            title="Acompanhar Pedido"
+                            onPress={() => navigation.navigate('OrderTracking', { order })}
+                            variant="ghost"
+                            size="sm"
+                            style={{ marginTop: 12 }}
+                        />
+                    ) : null}
+                </View>
+            ) : null}
+        </TouchableOpacity>
+    );
+});
+
+export const OrderHistoryScreen = ({ navigation }) => {
+    const [filter, setFilter] = useState('Todos');
+
+    const { data: orders = [], isLoading, refetch, isRefetching } = useQuery({
+        queryKey: ['myOrders'],
+        queryFn: () => ApiService.getMyOrders(),
+        staleTime: 2 * 60 * 1000,
+    });
+
+    const filteredOrders = useMemo(() => {
+        if (filter === 'Todos') return orders;
+        return orders.filter(o => {
+            const cfg = STATUS_CONFIG[o.status];
+            return cfg?.label === filter;
+        });
+    }, [orders, filter]);
+
+    const ListHeader = useMemo(() => (
+        <>
+            <LinearGradient colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]} style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
+                    <ChevronLeft size={22} color={Theme.colors.white} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Os Meus Pedidos</Text>
+                <View style={{ width: 36 }} />
+            </LinearGradient>
+
+            <FlatList
+                data={FILTER_PILLS}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={item => item}
+                contentContainerStyle={styles.filterRow}
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        style={[styles.filterPill, filter === item ? styles.filterPillActive : null]}
+                        onPress={() => setFilter(item)}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: filter === item }}
+                    >
+                        <Text style={[styles.filterText, filter === item ? styles.filterTextActive : null]}>{item}</Text>
+                    </TouchableOpacity>
+                )}
+            />
+        </>
+    ), [filter]);
+
+    const EmptyState = () => (
+        <View style={styles.emptyState}>
+            <Text style={{ fontSize: 48, marginBottom: 16 }}>📦</Text>
+            <Text style={styles.emptyTitle}>Sem pedidos ainda</Text>
+            <Text style={styles.emptySubtitle}>Os teus pedidos aparecerão aqui.</Text>
+            <PremiumButton title="Pedir Orçamento" onPress={() => navigation.navigate('QuotationTab')} size="md" style={{ marginTop: 24 }} />
         </View>
     );
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <ChevronLeft size={24} color={Theme.colors.textPrimary} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Meus Pedidos</Text>
-                <View style={{ width: 40 }} /> {/* Placeholder for alignment */}
-            </View>
-
-            <View style={styles.tabContainer}>
-                <TouchableOpacity style={[styles.tab, activeTab === 'ACTIVE' && styles.tabActive]} onPress={() => setActiveTab('ACTIVE')}>
-                    <Text style={[styles.tabText, activeTab === 'ACTIVE' && styles.tabTextActive]}>Em Andamento</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.tab, activeTab === 'HISTORY' && styles.tabActive]} onPress={() => setActiveTab('HISTORY')}>
-                    <Text style={[styles.tabText, activeTab === 'HISTORY' && styles.tabTextActive]}>Histórico</Text>
-                </TouchableOpacity>
-            </View>
-
-            {isLoading ? (
-                renderLoadingSkeletons()
-            ) : isError ? (
-                <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>Não foi possível carregar o histórico.</Text>
-                    <TouchableOpacity style={styles.retryButton} onPress={refetch}>
-                        <Text style={styles.retryText}>Tentar Novamente</Text>
-                    </TouchableOpacity>
-                </View>
-            ) : orders?.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                    <Package size={64} color={Theme.colors.textSecondary} style={{ opacity: 0.3, marginBottom: 16 }} />
-                    <Text style={styles.emptyTitle}>Nenhum pedido</Text>
-                    <Text style={styles.emptyText}>Você ainda não fez nenhuma encomenda connosco.</Text>
-                </View>
-            ) : (
-                <FlatList
-                    data={orders.filter(o => activeTab === 'ACTIVE' ? (o.status !== 'DELIVERED' && o.status !== 'COMPLETED' && o.status !== 'CANCELLED') : (o.status === 'DELIVERED' || o.status === 'COMPLETED' || o.status === 'CANCELLED'))}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderOrderItem}
-                    contentContainerStyle={styles.listContainer}
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={[Theme.colors.primary]} />
-                    }
-                    ListEmptyComponent={() => (
-                        <View style={[styles.emptyContainer, { marginTop: 40 }]}>
-                            <Text style={styles.emptyText}>Não tens pedidos {activeTab === 'ACTIVE' ? 'em andamento' : 'no histórico'}.</Text>
-                        </View>
-                    )}
-                />
-            )}
+            <FlatList
+                data={filteredOrders}
+                keyExtractor={item => item.id?.toString()}
+                renderItem={({ item }) => <OrderCard order={item} />}
+                ListHeaderComponent={ListHeader}
+                ListEmptyComponent={isLoading ? (
+                    <View style={{ paddingHorizontal: 20, gap: 12 }}>
+                        <Skeleton width="100%" height={80} borderRadius={16} />
+                        <Skeleton width="100%" height={80} borderRadius={16} />
+                        <Skeleton width="100%" height={80} borderRadius={16} />
+                    </View>
+                ) : <EmptyState />}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                    <RefreshControl refreshing={isRefetching} onRefresh={refetch} colors={[Theme.colors.primary]} tintColor={Theme.colors.primary} />
+                }
+            />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: Theme.colors.background,
-    },
+    container: { flex: 1, backgroundColor: Theme.colors.background },
+    listContent: { paddingBottom: 32 },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: 60,
-        paddingHorizontal: Theme.spacing.lg,
-        paddingBottom: 20,
-        backgroundColor: Theme.colors.surface,
-        ...Theme.shadows.light,
-        zIndex: 10,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingTop: 52, paddingBottom: 16, paddingHorizontal: 16,
     },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: Theme.colors.textPrimary,
-    },
-    backButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-    },
-    listContainer: {
-        padding: Theme.spacing.lg,
-    },
-    skeletonContainer: {
-        padding: Theme.spacing.lg,
-    },
+    backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+    headerTitle: { ...T.h3, color: Theme.colors.white },
+    filterRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
+    filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Theme.radius.full, backgroundColor: Theme.colors.surfaceElevated, borderWidth: 1, borderColor: Theme.colors.border },
+    filterPillActive: { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary },
+    filterText: { fontFamily: T.bodySmall.fontFamily, fontSize: 12, color: Theme.colors.textSecondary },
+    filterTextActive: { color: Theme.colors.white, fontFamily: 'Poppins_600SemiBold' },
     orderCard: {
-        backgroundColor: Theme.colors.surface,
-        borderRadius: 20,
-        padding: 16,
-        marginBottom: 16,
-        ...Theme.shadows.medium,
-    },
-    orderHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        paddingBottom: 12,
+        backgroundColor: Theme.colors.surfaceElevated,
+        marginHorizontal: 20,
         marginBottom: 12,
+        borderRadius: Theme.radius.lg,
+        padding: 16,
+        ...Theme.elevation.xs,
     },
-    orderHeaderLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    iconBox: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        backgroundColor: '#FFEBF0',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-    },
-    orderId: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: Theme.colors.textPrimary,
-        marginBottom: 2,
-    },
-    orderDate: {
-        fontSize: 12,
-        color: Theme.colors.textSecondary,
-    },
-    badgeContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    badgeText: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        textTransform: 'uppercase',
-    },
-    orderDetails: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    orderItems: {
-        fontSize: 14,
-        color: Theme.colors.textSecondary,
-    },
-    orderTotal: {
-        fontSize: 16,
-        fontWeight: '900',
-        color: Theme.colors.primary,
-    },
-    emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 40,
-    },
-    emptyTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: Theme.colors.textPrimary,
-        marginBottom: 8,
-    },
-    emptyText: {
-        fontSize: 14,
-        color: Theme.colors.textSecondary,
-        textAlign: 'center',
-        lineHeight: 20,
-    },
-    retryButton: {
-        marginTop: 16,
-        backgroundColor: Theme.colors.primary,
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 8,
-    },
-    retryText: {
-        color: 'white',
-        fontWeight: 'bold',
-    },
-    tabContainer: {
-        flexDirection: 'row', backgroundColor: 'white', paddingHorizontal: Theme.spacing.lg,
-        paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0'
-    },
-    tab: {
-        flex: 1, paddingVertical: 12, alignItems: 'center',
-        borderBottomWidth: 2, borderBottomColor: 'transparent'
-    },
-    tabActive: {
-        borderBottomColor: Theme.colors.primary
-    },
-    tabText: { fontSize: 14, fontWeight: '600', color: Theme.colors.textSecondary },
-    tabTextActive: { color: Theme.colors.primary },
-    expandedDetails: { marginTop: 8 },
-    expandedItemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-    expandedItemName: { fontSize: 14, color: '#333', flex: 1, marginRight: 16 },
-    expandedItemPrice: { fontSize: 14, color: Theme.colors.textSecondary, fontWeight: '500' },
-    expandedTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
-    expandedTotalLabel: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-    expandedTotalValue: { fontSize: 18, fontWeight: 'bold', color: Theme.colors.primary },
+    orderHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    orderId: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: Theme.colors.textPrimary },
+    orderDate: { ...T.bodySmall, marginTop: 2 },
+    orderExpanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: Theme.colors.border },
+    orderDetailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+    orderDetailLabel: { ...T.bodySmall },
+    orderDetailValue: { ...T.body, fontFamily: 'Poppins_500Medium' },
+    emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
+    emptyTitle: { ...T.h3, textAlign: 'center', marginBottom: 8 },
+    emptySubtitle: { ...T.bodySmall, textAlign: 'center' },
 });

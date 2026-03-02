@@ -64,10 +64,10 @@ const styles = StyleSheet.create({
     text: {
         color: Theme.colors.white,
         fontSize: 16,
-        fontFamily: Theme.fonts.bodyMedium,
+        fontFamily: Theme.fonts.semibold,
         fontWeight: '600',
     },
     secondaryText: {
-        color: Theme.colors.accent,
+        color: Theme.colors.secondary,
     },
 });

@@ -1,713 +1,524 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Linking, Animated, Dimensions, Image, Modal, FlatList } from 'react-native';
-import { ChevronRight, ChevronLeft, CheckCircle, Calculator, Sparkles, Wand2, User, Image as ImageIcon } from 'lucide-react-native';
-import { Theme } from '../theme';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
+import {
+    View, Text, StyleSheet, TouchableOpacity, ScrollView,
+    TextInput, Linking, Animated, Dimensions, Image, Platform,
+    KeyboardAvoidingView,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { ChevronLeft, Calendar, Users, Cake, UtensilsCrossed, CheckCircle, Send } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Theme, T } from '../theme';
 import { ApiService } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { useToastStore } from '../store/toastStore';
+import { PremiumButton } from '../components/ui/PremiumButton';
+import { PremiumInput } from '../components/ui/PremiumInput';
+import { formatKz, formatDateAO, humanizeError } from '../utils/errorMessages';
+import { enqueueQuotation } from '../utils/offlineQueue';
 import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
 
+// Event types with visual cards
+const EVENT_TYPES = [
+    { id: 'aniversario', label: 'Aniversário', icon: '🎂', color: '#FFE0B2' },
+    { id: 'casamento', label: 'Casamento', icon: '💒', color: '#F8BBD0' },
+    { id: 'corporativo', label: 'Corporativo', icon: '🏢', color: '#BBDEFB' },
+    { id: 'batizado', label: 'Batizado', icon: '⛪', color: '#C8E6C9' },
+    { id: 'formatura', label: 'Formatura', icon: '🎓', color: '#D1C4E9' },
+    { id: 'cha_bebe', label: 'Chá de Bebé', icon: '👶', color: '#B3E5FC' },
+];
+
+// Complements — preços em Kz
+const COMPLEMENTS = [
+    { id: 'cupcakes', label: 'Cupcakes Decorados', price: 12000, icon: '🧁' },
+    { id: 'doces', label: 'Mesa de Doces Finos', price: 25000, icon: '🍬' },
+    { id: 'salgados', label: 'Kit Salgados Premium', price: 45000, icon: '🥟' },
+    { id: 'bebidas', label: 'Bebidas Tropicais', price: 20000, icon: '🍹' },
+    { id: 'decoracao', label: 'Decoração Temática', price: 35000, icon: '🎈' },
+];
+
+// Base prices by event type (per guest, in Kz)
+const BASE_PRICE_PER_GUEST = {
+    aniversario: 3500,
+    casamento: 5500,
+    corporativo: 6000,
+    batizado: 4000,
+    formatura: 4500,
+    cha_bebe: 3500,
+};
+
+// Suggestions per event type
+const SUGGESTIONS = {
+    aniversario: ['cupcakes', 'doces', 'bebidas'],
+    casamento: ['doces', 'salgados', 'bebidas', 'decoracao'],
+    corporativo: ['salgados', 'bebidas'],
+    batizado: ['doces', 'cupcakes'],
+    formatura: ['cupcakes', 'doces', 'bebidas'],
+    cha_bebe: ['cupcakes', 'doces'],
+};
+
+// === Step Indicator ===
+const StepIndicator = ({ current, total }) => (
+    <View style={si.container}>
+        {Array.from({ length: total }, (_, i) => (
+            <React.Fragment key={i}>
+                <View style={[si.dot, i < current ? si.dotDone : null, i === current ? si.dotCurrent : null]}>
+                    {i < current ? <CheckCircle size={14} color={Theme.colors.white} /> : <Text style={si.dotText}>{i + 1}</Text>}
+                </View>
+                {i < total - 1 ? <View style={[si.line, i < current ? si.lineDone : null]} /> : null}
+            </React.Fragment>
+        ))}
+    </View>
+);
+
+const si = StyleSheet.create({
+    container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
+    dot: { width: 28, height: 28, borderRadius: 14, backgroundColor: Theme.colors.border, justifyContent: 'center', alignItems: 'center' },
+    dotCurrent: { backgroundColor: Theme.colors.primary, ...Theme.elevation.sm },
+    dotDone: { backgroundColor: Theme.colors.secondary },
+    dotText: { fontFamily: T.button.fontFamily, fontSize: 12, color: Theme.colors.white },
+    line: { width: 40, height: 2, backgroundColor: Theme.colors.border },
+    lineDone: { backgroundColor: Theme.colors.secondary },
+});
+
+// === Event Type Card ===
+const EventCard = React.memo(({ item, selected, onPress }) => (
+    <TouchableOpacity
+        style={[ec.card, selected ? ec.selected : null, { backgroundColor: item.color }]}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="radio"
+        accessibilityLabel={item.label}
+        accessibilityState={{ selected }}
+    >
+        <Text style={ec.icon}>{item.icon}</Text>
+        <Text style={ec.label}>{item.label}</Text>
+        {selected ? <View style={ec.check}><CheckCircle size={16} color={Theme.colors.white} /></View> : null}
+    </TouchableOpacity>
+));
+
+const ec = StyleSheet.create({
+    card: { width: (width - 60) / 2, aspectRatio: 1.2, borderRadius: Theme.radius.lg, padding: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
+    selected: { borderColor: Theme.colors.primary },
+    icon: { fontSize: 36, marginBottom: 8 },
+    label: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: Theme.colors.textPrimary, textAlign: 'center' },
+    check: { position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: Theme.colors.primary, justifyContent: 'center', alignItems: 'center' },
+});
+
+// === Complement Chip ===
+const ComplementChip = React.memo(({ item, selected, suggested, onPress }) => (
+    <TouchableOpacity
+        style={[cc.chip, selected ? cc.chipSelected : null]}
+        onPress={onPress}
+        activeOpacity={0.85}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: selected }}
+    >
+        <Text style={cc.icon}>{item.icon}</Text>
+        <View style={cc.textWrap}>
+            <Text style={[cc.label, selected ? cc.labelSelected : null]}>{item.label}</Text>
+            <Text style={cc.price}>{formatKz(item.price)}</Text>
+        </View>
+        {suggested && !selected ? <View style={cc.badge}><Text style={cc.badgeText}>Sugerido</Text></View> : null}
+        {selected ? <CheckCircle size={16} color={Theme.colors.secondary} /> : null}
+    </TouchableOpacity>
+));
+
+const cc = StyleSheet.create({
+    chip: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderRadius: Theme.radius.md, backgroundColor: Theme.colors.surfaceElevated, borderWidth: 1.5, borderColor: Theme.colors.border, marginBottom: 10 },
+    chipSelected: { borderColor: Theme.colors.secondary, backgroundColor: Theme.colors.secondaryGhost },
+    icon: { fontSize: 24 },
+    textWrap: { flex: 1 },
+    label: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: Theme.colors.textPrimary },
+    labelSelected: { color: Theme.colors.secondaryDark },
+    price: { ...T.bodySmall, fontSize: 12, marginTop: 2 },
+    badge: { backgroundColor: Theme.colors.primaryGhost, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Theme.radius.full },
+    badgeText: { fontFamily: T.bodySmall.fontFamily, fontSize: 10, color: Theme.colors.primary },
+});
+
+// === MAIN WIZARD ===
 export const QuotationWizard = ({ navigation }) => {
     const { user } = useAuthStore();
-    const [step, setStep] = useState(1);
+    const { show } = useToastStore();
+
+    const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
-    const EVENT_TYPES_LOCAL = {
-        WEDDING: 'casamento',
-        BIRTHDAY: 'aniversário',
-        CORPORATE: 'corporativo',
-        BAPTISM: 'batizado',
-        GRADUATION: 'formatura',
-        BABY_SHOWER: 'chá de bebé',
-        OTHER: 'outro'
-    };
-
-    const [formData, setFormData] = useState({
-        eventType: EVENT_TYPES_LOCAL.BIRTHDAY,
-        customEventType: '',
-        guestCount: '',
-        date: '',
-        complements: [],
-        customerName: user?.name || '',
-        customerPhone: user?.phone || '',
-    });
-    const [imageUri, setImageUri] = useState(null);
+    const [eventType, setEventType] = useState('');
+    const [guestCount, setGuestCount] = useState(50);
+    const [eventDate, setEventDate] = useState(new Date(Date.now() + 7 * 86400000));
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [blockedDates, setBlockedDates] = useState([]);
+    const [selectedComplements, setSelectedComplements] = useState([]);
+    const [notes, setNotes] = useState('');
+    const [customerName, setCustomerName] = useState(user?.name || '');
+    const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
+    const [imageUri, setImageUri] = useState(null);
 
-    const availableDates = React.useMemo(() => {
-        const dates = [];
-        let d = new Date();
-        d.setDate(d.getDate() + 1); // amanha
-        for (let i = 0; i < 365; i++) {
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            const isoDate = `${year}-${month}-${day}`;
-            const displayDate = `${day}/${month}/${year}`;
-
-            const isBlocked = blockedDates.includes(isoDate);
-            dates.push({ id: isoDate, displayDate, isBlocked });
-
-            d.setDate(d.getDate() + 1);
-        }
-        return dates;
-    }, [blockedDates]);
-
-
-    // Animation values
-    const fadeAnim = useRef(new Animated.Value(1)).current;
-    const slideAnim = useRef(new Animated.Value(0)).current;
-
-    const COMPLEMENTS_LIST = [
-        { id: 'CUPCAKES', label: 'Cupcakes Decorados', price: 12000, icon: '🧁' },
-        { id: 'SWEETS', label: 'Mesa de Doces Finos', price: 25000, icon: '🍬' },
-        { id: 'SALTY', label: 'Kit Salgados Premium', price: 45000, icon: '🥟' },
-        { id: 'DRINKS', label: 'Bebidas Tropicais', price: 20000, icon: '🍹' },
-    ];
-
-    const EVENT_BASE_PRICES = {
-        [EVENT_TYPES_LOCAL.WEDDING]: 25000,
-        [EVENT_TYPES_LOCAL.BIRTHDAY]: 10000,
-        [EVENT_TYPES_LOCAL.CORPORATE]: 30000,
-        [EVENT_TYPES_LOCAL.BAPTISM]: 15000,
-        [EVENT_TYPES_LOCAL.GRADUATION]: 20000,
-        [EVENT_TYPES_LOCAL.BABY_SHOWER]: 12000,
-        [EVENT_TYPES_LOCAL.OTHER]: 10000,
-    };
-
-    const calculateRealTotal = () => {
-        const base = EVENT_BASE_PRICES[formData.eventType] || 15000;
-        const guestsAmount = (parseInt(formData.guestCount) || 0) * 800; // Kz 800 por convidado
-        const complementsAmount = formData.complements.reduce((sum, currentId) => {
-            const comp = COMPLEMENTS_LIST.find(c => c.id === currentId);
-            return sum + (comp ? comp.price : 0);
+    // Pricing calculator
+    const pricing = useMemo(() => {
+        const base = (BASE_PRICE_PER_GUEST[eventType] || 3500) * guestCount;
+        const complementsTotal = selectedComplements.reduce((sum, id) => {
+            const c = COMPLEMENTS.find(x => x.id === id);
+            return sum + (c ? c.price : 0);
         }, 0);
-        return base + guestsAmount + complementsAmount;
-    };
+        const subtotal = base + complementsTotal;
+        const tax = Math.round(subtotal * 0.05);
+        return { base, complementsTotal, subtotal, tax, total: subtotal + tax };
+    }, [eventType, guestCount, selectedComplements]);
 
-    useEffect(() => {
-        animateTransition();
-        ApiService.getBlockedDates().then(dates => setBlockedDates(dates)).catch(() => { });
-    }, [step]);
+    const suggestions = SUGGESTIONS[eventType] || [];
 
-    const animateTransition = () => {
-        fadeAnim.setValue(0);
-        slideAnim.setValue(50);
+    const toggleComplement = useCallback((id) => {
+        setSelectedComplements(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    }, []);
 
-        Animated.parallel([
-            Animated.timing(fadeAnim, {
-                toValue: 1,
-                duration: 400,
-                useNativeDriver: true,
-            }),
-            Animated.spring(slideAnim, {
-                toValue: 0,
-                friction: 8,
-                tension: 40,
-                useNativeDriver: true,
-            })
-        ]).start();
-    };
+    const adjustGuests = useCallback((delta) => {
+        setGuestCount(prev => Math.max(10, Math.min(500, prev + delta)));
+    }, []);
 
-    const toggleComplement = (id) => {
-        setFormData(prev => ({
-            ...prev,
-            complements: prev.complements.includes(id)
-                ? prev.complements.filter(c => c !== id)
-                : [...prev.complements, id]
-        }));
-    };
-
-    const handleNext = () => {
-        if (step === 1) {
-            if (!formData.eventType) return Alert.alert('Atenção', 'Selecione um tipo de evento para continuar.');
-            if (formData.eventType === 'outro' && !formData.customEventType.trim()) {
-                return Alert.alert('Atenção', 'Especifique o tipo de evento.');
-            }
-        }
-        if (step === 2) {
-            const guests = parseInt(formData.guestCount);
-            if (!guests || guests < 10) return Alert.alert('Atenção', 'O número mínimo de convidados é 10.');
-            if (!formData.date) return Alert.alert('Atenção', 'Selecione a data do evento.');
-        }
-
-        if (step < 4) setStep(step + 1);
-        else handleSubmit();
-    };
-
-    const isNextDisabled = () => {
-        if (step === 1) return !formData.eventType || (formData.eventType === 'outro' && !formData.customEventType.trim());
-        if (step === 2) {
-            const guests = parseInt(formData.guestCount) || 0;
-            return guests < 10 || !formData.date;
-        }
-        return false;
-    };
-
-    const handleBack = () => {
-        if (step > 1) setStep(step - 1);
-        else navigation.goBack();
-    };
-
-    const shareToWhatsApp = (quotation) => {
-        const message = `Olá! Acabei de gerar um orçamento no app Puculuxa:%0A%0A` +
-            `*Evento:* ${quotation.eventType}%0A` +
-            `*Convidados:* ${quotation.guestCount}%0A` +
-            `*Total Estimado:* Kz ${quotation.total.toLocaleString('pt-BR')}%0A%0A` +
-            `Gostaria de confirmar os detalhes e receber o PDF formal.`;
-
-        const url = `whatsapp://send?phone=+244923000000&text=${message}`;
-        Linking.openURL(url).catch(() => {
-            Alert.alert('Erro', 'Certifique-se de que o WhatsApp está instalado.');
-        });
-    };
+    const goNext = () => { if (step < 3) setStep(step + 1); };
+    const goBack = () => { if (step > 0) setStep(step - 1); else if (navigation.canGoBack()) navigation.goBack(); };
 
     const pickImage = async () => {
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.8,
-        });
-
-        if (!result.canceled) {
-            setImageUri(result.assets[0].uri);
-        }
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+        if (!result.canceled) setImageUri(result.assets[0].uri);
     };
 
     const handleSubmit = async () => {
+        if (!customerName.trim() || !customerPhone.trim()) {
+            show({ type: 'warning', message: 'Preenche o nome e telefone.' });
+            return;
+        }
         setLoading(true);
+        const payload = {
+            eventType,
+            guestCount,
+            date: eventDate.toISOString(),
+            complements: selectedComplements,
+            notes,
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            estimatedTotal: pricing.total,
+        };
+
         try {
-            const totalEstimated = calculateRealTotal();
-
-            let referenceImage = null;
             if (imageUri) {
-                const uploadRes = await ApiService.uploadQuotationImage(imageUri);
-                referenceImage = uploadRes.url;
+                try { await ApiService.uploadQuotationImage(imageUri); } catch { }
             }
-
-            const payload = {
-                eventType: formData.eventType === 'outro' ? formData.customEventType : formData.eventType,
-                guestCount: parseInt(formData.guestCount, 10) || 0,
-                date: formData.date,
-                complements: formData.complements,
-                customerName: formData.customerName,
-                customerPhone: formData.customerPhone,
-                referenceImage,
-                total: totalEstimated
-            };
-
-            const response = await ApiService.postQuotation(payload);
-
-            if (response.id) {
-                Alert.alert(
-                    "Sucesso!",
-                    "Seu orçamento foi enviado. Deseja confirmar agora via WhatsApp?",
-                    [
-                        { text: "Depois", onPress: () => navigation.navigate('Home') },
-                        {
-                            text: "Confirmar via WhatsApp", onPress: () => {
-                                shareToWhatsApp(response);
-                                navigation.navigate('Home');
-                            }
-                        }
-                    ]
-                );
-            }
-        } catch (error) {
-            Alert.alert('Erro', 'Não foi possível enviar o orçamento. Tente novamente.');
+            await ApiService.postQuotation(payload);
+            show({ type: 'success', message: 'Orçamento enviado! Entraremos em contacto.' });
+            if (navigation.canGoBack()) navigation.goBack();
+        } catch (err) {
+            await enqueueQuotation(payload);
+            show({ type: 'brand', message: 'Sem internet. O orçamento será enviado quando voltares a estar online.', duration: 5000 });
+            if (navigation.canGoBack()) navigation.goBack();
         } finally {
             setLoading(false);
         }
     };
 
-    const renderHeader = () => (
-        <View style={styles.header}>
-            <View style={styles.progressBarContainer}>
-                {[1, 2, 3, 4].map(s => (
-                    <View key={s} style={styles.progressStepWrapper}>
-                        <View style={[
-                            styles.progressStep,
-                            s <= step && styles.progressStepActive,
-                            s === step && styles.progressStepCurrent
-                        ]} />
-                    </View>
+    const openWhatsApp = () => {
+        const msg = `Olá Puculuxa! 🎂\n\nGostaria de um orçamento:\n• Evento: ${EVENT_TYPES.find(e => e.id === eventType)?.label || eventType}\n• Convidados: ${guestCount}\n• Data: ${formatDateAO(eventDate)}\n• Estimativa: ${formatKz(pricing.total)}\n\nObrigado(a)!`;
+        Linking.openURL(`https://wa.me/244923456789?text=${encodeURIComponent(msg)}`);
+    };
+
+    const onDateChange = (event, date) => {
+        setShowDatePicker(Platform.OS === 'ios');
+        if (date) setEventDate(date);
+    };
+
+    // === STEP RENDERERS ===
+
+    const renderStep0 = () => (
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Que tipo de evento?</Text>
+            <Text style={styles.stepSubtitle}>Escolhe o que melhor descreve o teu evento</Text>
+            <View style={styles.eventGrid}>
+                {EVENT_TYPES.map(et => (
+                    <EventCard key={et.id} item={et} selected={eventType === et.id} onPress={() => setEventType(et.id)} />
                 ))}
             </View>
-            <Text style={styles.headerTitle}>
-                {step === 1 && "Tipo de Evento"}
-                {step === 2 && "Detalhes"}
-                {step === 3 && "Complementos"}
-                {step === 4 && "Resumo"}
-            </Text>
+            <View style={styles.stepActions}>
+                <PremiumButton title="Continuar →" onPress={goNext} disabled={!eventType} size="lg" />
+            </View>
         </View>
     );
 
-    const renderSmartSuggestion = () => {
-        if (step !== 3) return null;
-        return (
-            <View style={styles.smartBadge}>
-                <Sparkles size={16} color={Theme.colors.primary} />
-                <Text style={styles.smartText}>Sugestão IA: Adicione doces finos para casamentos!</Text>
+    const renderStep1 = () => (
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Detalhes do evento</Text>
+            <Text style={styles.stepSubtitle}>Quanto mais detalhes, melhor o orçamento</Text>
+
+            {/* Guest count */}
+            <View style={styles.guestSection}>
+                <View style={styles.guestHeader}>
+                    <Users size={20} color={Theme.colors.primary} />
+                    <Text style={styles.guestLabel}>Convidados</Text>
+                </View>
+                <View style={styles.guestControl}>
+                    <TouchableOpacity style={styles.guestBtn} onPress={() => adjustGuests(-10)} accessibilityLabel="Menos 10 convidados">
+                        <Text style={styles.guestBtnText}>-10</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.guestBtn} onPress={() => adjustGuests(-1)} accessibilityLabel="Menos 1 convidado">
+                        <Text style={styles.guestBtnText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.guestCount}>{guestCount}</Text>
+                    <TouchableOpacity style={styles.guestBtn} onPress={() => adjustGuests(1)} accessibilityLabel="Mais 1 convidado">
+                        <Text style={styles.guestBtnText}>+</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.guestBtn} onPress={() => adjustGuests(10)} accessibilityLabel="Mais 10 convidados">
+                        <Text style={styles.guestBtnText}>+10</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
-        );
-    };
 
-    const renderStep = () => {
-        return (
-            <Animated.View style={[
-                styles.stepContent,
-                {
-                    opacity: fadeAnim,
-                    transform: [{ translateY: slideAnim }]
-                }
-            ]}>
-                {step === 1 && (
-                    <View>
-                        <Text style={styles.stepTitle}>Qual o seu evento?</Text>
-                        {Object.entries(EVENT_TYPES_LOCAL).map(([key, value]) => (
-                            <TouchableOpacity
-                                key={key}
-                                style={[styles.optionCard, formData.eventType === value && styles.optionCardActive]}
-                                onPress={() => setFormData({ ...formData, eventType: value })}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={[styles.optionText, formData.eventType === value && styles.optionTextActive]}>
-                                    {value.charAt(0).toUpperCase() + value.slice(1)}
-                                </Text>
-                                {formData.eventType === value && <CheckCircle size={20} color={Theme.colors.primary} />}
-                            </TouchableOpacity>
-                        ))}
-                        {formData.eventType === 'outro' && (
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Especifique o tipo de evento"
-                                placeholderTextColor={Theme.colors.textSecondary + '80'}
-                                value={formData.customEventType}
-                                onChangeText={(text) => setFormData({ ...formData, customEventType: text })}
-                            />
-                        )}
+            {/* Date picker */}
+            <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)} accessibilityLabel="Escolher data do evento">
+                <Calendar size={20} color={Theme.colors.primary} />
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.dateLabel}>Data do evento</Text>
+                    <Text style={styles.dateValue}>{formatDateAO(eventDate)}</Text>
+                </View>
+            </TouchableOpacity>
+
+            {showDatePicker ? (
+                <DateTimePicker
+                    value={eventDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    minimumDate={new Date(Date.now() + 86400000)}
+                    onChange={onDateChange}
+                />
+            ) : null}
+
+            {/* Notes */}
+            <PremiumInput
+                label="Observações (opcional)"
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Ex: Bolo de chocolate, tema unicórnio..."
+                multiline
+            />
+
+            {/* Reference image */}
+            <TouchableOpacity style={styles.imageButton} onPress={pickImage} accessibilityLabel="Anexar imagem de referência">
+                {imageUri ? (
+                    <Image source={{ uri: imageUri }} style={styles.refImage} />
+                ) : (
+                    <View style={styles.imagePlaceholder}>
+                        <Cake size={24} color={Theme.colors.textTertiary} />
+                        <Text style={styles.imageText}>Anexar imagem de referência</Text>
                     </View>
                 )}
+            </TouchableOpacity>
 
-                {step === 2 && (
-                    <View>
-                        <Text style={styles.stepTitle}>Quantos convidados?</Text>
-                        <TextInput
-                            style={styles.input}
-                            keyboardType="numeric"
-                            placeholder="Ex: 50"
-                            placeholderTextColor={Theme.colors.textSecondary + '80'}
-                            value={formData.guestCount}
-                            onChangeText={(text) => setFormData({ ...formData, guestCount: text })}
-                        />
-                        <Text style={styles.stepTitle}>Data do Evento</Text>
-                        <TouchableOpacity
-                            style={[styles.input, { justifyContent: 'center' }]}
-                            activeOpacity={0.7}
-                            onPress={() => setShowDatePicker(true)}
-                        >
-                            <Text style={{ color: formData.date ? Theme.colors.textPrimary : Theme.colors.textSecondary }}>
-                                {formData.date || "DD/MM/AAAA"}
-                            </Text>
-                        </TouchableOpacity>
+            <View style={styles.stepActions}>
+                <PremiumButton title="← Voltar" onPress={goBack} variant="ghost" size="md" style={{ flex: 1 }} />
+                <PremiumButton title="Continuar →" onPress={goNext} size="md" style={{ flex: 2 }} />
+            </View>
+        </View>
+    );
 
-                        <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
-                            <View style={styles.modalOverlay}>
-                                <View style={styles.modalContent}>
-                                    <View style={styles.modalHeader}>
-                                        <Text style={styles.modalTitle}>Selecione a Data</Text>
-                                        <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                                            <Text style={styles.modalCloseText}>Fechar</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                    <FlatList
-                                        data={availableDates}
-                                        keyExtractor={item => item.id}
-                                        showsVerticalScrollIndicator={false}
-                                        renderItem={({ item }) => (
-                                            <TouchableOpacity
-                                                style={[styles.dateItem, item.isBlocked && styles.dateItemBlocked, formData.date === item.displayDate && styles.dateItemActive]}
-                                                disabled={item.isBlocked}
-                                                onPress={() => {
-                                                    setFormData({ ...formData, date: item.displayDate });
-                                                    setShowDatePicker(false);
-                                                }}
-                                            >
-                                                <Text style={[styles.dateText, item.isBlocked && styles.dateTextBlocked, formData.date === item.displayDate && styles.dateTextActive]}>
-                                                    {item.displayDate} {item.isBlocked ? '(Indisponível)' : ''}
-                                                </Text>
-                                            </TouchableOpacity>
-                                        )}
-                                    />
-                                </View>
-                            </View>
-                        </Modal>
+    const renderStep2 = () => (
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Complementos</Text>
+            <Text style={styles.stepSubtitle}>Adiciona extras ao teu evento</Text>
 
-                        <Text style={styles.stepTitle}>Imagem de Referência (Opcional)</Text>
-                        <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage} activeOpacity={0.8}>
-                            <ImageIcon size={24} color={Theme.colors.primary} />
-                            <Text style={styles.imagePickerText}>
-                                {imageUri ? 'Imagem Selecionada (Tocar para Mudar)' : 'Selecionar Imagem de Inspiração'}
-                            </Text>
-                        </TouchableOpacity>
+            {COMPLEMENTS.map(c => (
+                <ComplementChip
+                    key={c.id}
+                    item={c}
+                    selected={selectedComplements.includes(c.id)}
+                    suggested={suggestions.includes(c.id)}
+                    onPress={() => toggleComplement(c.id)}
+                />
+            ))}
+
+            <View style={styles.stepActions}>
+                <PremiumButton title="← Voltar" onPress={goBack} variant="ghost" size="md" style={{ flex: 1 }} />
+                <PremiumButton title="Continuar →" onPress={goNext} size="md" style={{ flex: 2 }} />
+            </View>
+        </View>
+    );
+
+    const renderStep3 = () => (
+        <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Resumo do Orçamento</Text>
+
+            {/* Receipt card */}
+            <View style={styles.receipt}>
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Evento</Text>
+                    <Text style={styles.receiptValue}>{EVENT_TYPES.find(e => e.id === eventType)?.label || eventType}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Convidados</Text>
+                    <Text style={styles.receiptValue}>{guestCount}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Data</Text>
+                    <Text style={styles.receiptValue}>{formatDateAO(eventDate)}</Text>
+                </View>
+                {selectedComplements.length > 0 ? (
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Complementos</Text>
+                        <Text style={styles.receiptValue}>{selectedComplements.length} items</Text>
                     </View>
-                )}
-
-                {step === 3 && (
-                    <View>
-                        <Text style={styles.stepTitle}>Experiências Extras</Text>
-                        {renderSmartSuggestion()}
-                        {COMPLEMENTS_LIST.map(item => (
-                            <TouchableOpacity
-                                key={item.id}
-                                style={[styles.optionCard, formData.complements.includes(item.id) && styles.optionCardActive]}
-                                onPress={() => toggleComplement(item.id)}
-                                activeOpacity={0.8}
-                            >
-                                <View style={styles.optionRow}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                        <Text style={{ fontSize: 24, marginRight: 12 }}>{item.icon}</Text>
-                                        <View>
-                                            <Text style={[styles.optionText, formData.complements.includes(item.id) && styles.optionTextActive]}>
-                                                {item.label}
-                                            </Text>
-                                            <Text style={{ fontSize: 13, color: Theme.colors.textSecondary, marginTop: 4 }}>
-                                                + Kz {item.price.toLocaleString('pt-BR')}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <View style={[styles.checkbox, formData.complements.includes(item.id) && styles.checkboxActive]} />
-                                </View>
-                            </TouchableOpacity>
-                        ))}
+                ) : null}
+                <View style={styles.divider} />
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Base ({guestCount} × {formatKz(BASE_PRICE_PER_GUEST[eventType] || 3500)})</Text>
+                    <Text style={styles.receiptValue}>{formatKz(pricing.base)}</Text>
+                </View>
+                {pricing.complementsTotal > 0 ? (
+                    <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Complementos</Text>
+                        <Text style={styles.receiptValue}>{formatKz(pricing.complementsTotal)}</Text>
                     </View>
-                )}
+                ) : null}
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Taxa (5%)</Text>
+                    <Text style={styles.receiptValue}>{formatKz(pricing.tax)}</Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.receiptRow}>
+                    <Text style={styles.receiptTotalLabel}>Estimativa Total</Text>
+                    <Text style={styles.receiptTotalValue}>{formatKz(pricing.total)}</Text>
+                </View>
+            </View>
 
-                {step === 4 && (
-                    <View>
-                        <View style={{ alignItems: 'center', marginBottom: 24 }}>
-                            <Wand2 size={48} color={Theme.colors.primary} />
-                            <Text style={styles.magicTitle}>Orçamento Gerado!</Text>
-                        </View>
+            {/* Contact info */}
+            <View style={styles.contactSection}>
+                <Text style={styles.contactTitle}>Os teus dados</Text>
+                <PremiumInput label="Nome" value={customerName} onChangeText={setCustomerName} placeholder="O teu nome" />
+                <PremiumInput label="Telefone" value={customerPhone} onChangeText={setCustomerPhone} placeholder="+244 923 456 789" keyboardType="phone-pad" />
+            </View>
 
-                        <View style={styles.summaryCard}>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Evento</Text>
-                                <Text style={styles.summaryValue}>{formData.eventType === 'outro' ? formData.customEventType : formData.eventType}</Text>
-                            </View>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Convidados</Text>
-                                <Text style={styles.summaryValue}>{formData.guestCount}</Text>
-                            </View>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Data</Text>
-                                <Text style={styles.summaryValue}>{formData.date}</Text>
-                            </View>
-                            {imageUri ? (
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Imagem de Referência</Text>
-                                    <Image source={{ uri: imageUri }} style={{ width: 40, height: 40, borderRadius: 8 }} />
-                                </View>
-                            ) : null}
+            <View style={{ gap: 12 }}>
+                <PremiumButton title="Enviar Orçamento" onPress={handleSubmit} size="lg" loading={loading} icon={<Send size={18} color={Theme.colors.white} />} />
+                <PremiumButton
+                    title="Enviar via WhatsApp"
+                    onPress={openWhatsApp}
+                    variant="ghost"
+                    size="md"
+                    style={{ borderColor: Theme.colors.whatsapp }}
+                />
+            </View>
 
-                            {formData.complements.length > 0 ? (
-                                <>
-                                    <View style={[styles.divider, { marginVertical: 12 }]} />
-                                    <Text style={[styles.summaryLabel, { marginBottom: 8 }]}>Complementos Adicionados:</Text>
-                                    {formData.complements.map(cId => {
-                                        const comp = COMPLEMENTS_LIST.find(c => c.id === cId);
-                                        if (!comp) return null;
-                                        return (
-                                            <View key={cId} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary }}>{comp.icon} {comp.label}</Text>
-                                                <Text style={{ fontSize: 13, color: Theme.colors.textSecondary }}>+ Kz {comp.price.toLocaleString('pt-BR')}</Text>
-                                            </View>
-                                        );
-                                    })}
-                                </>
-                            ) : null}
+            <View style={[styles.stepActions, { marginTop: 8 }]}>
+                <PremiumButton title="← Voltar" onPress={goBack} variant="ghost" size="md" />
+            </View>
+        </View>
+    );
 
-                            <View style={styles.divider} />
-
-                            <View style={styles.totalRow}>
-                                <Text style={styles.totalLabel}>Total Estimado</Text>
-                                <Text style={styles.totalValue}>Kz {calculateRealTotal().toLocaleString('pt-BR')}</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.disclaimer}>
-                            Este valor é uma estimativa inteligente baseada em eventos similares.
-                        </Text>
-                    </View>
-                )}
-            </Animated.View>
-        );
-    };
+    const steps = [renderStep0, renderStep1, renderStep2, renderStep3];
 
     return (
         <View style={styles.container}>
-            {renderHeader()}
-
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {renderStep()}
-            </ScrollView>
-
-            <View style={styles.footer}>
-                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-                    <ChevronLeft size={24} color={Theme.colors.textSecondary} />
+            {/* Header */}
+            <LinearGradient colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]} style={styles.header}>
+                <TouchableOpacity onPress={goBack} style={styles.backBtn} accessibilityLabel="Voltar" accessibilityRole="button">
+                    <ChevronLeft size={22} color={Theme.colors.white} />
                 </TouchableOpacity>
+                <Text style={styles.headerTitle}>Pedir Orçamento</Text>
+                <View style={{ width: 36 }} />
+            </LinearGradient>
 
-                <TouchableOpacity onPress={handleNext} style={[styles.nextButton, isNextDisabled() && { opacity: 0.5 }]} disabled={isNextDisabled()}>
-                    <Text style={styles.nextText}>{step === 4 ? 'Finalizar Pedido' : 'Continuar'}</Text>
-                    {step < 4 ? <ChevronRight size={20} color="white" /> : <CheckCircle size={20} color="white" />}
-                </TouchableOpacity>
-            </View>
+            <StepIndicator current={step} total={4} />
+
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                    {steps[step]()}
+                </ScrollView>
+            </KeyboardAvoidingView>
+
+            {/* Persistent price estimator — visible on step 1+ */}
+            {step > 0 && eventType ? (
+                <View style={styles.estimator}>
+                    <View>
+                        <Text style={styles.estimatorLabel}>Estimativa</Text>
+                        <Text style={styles.estimatorPrice}>{formatKz(pricing.total)}</Text>
+                    </View>
+                    <Text style={styles.estimatorDetail}>{guestCount} convidados</Text>
+                </View>
+            ) : null}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: Theme.colors.background,
-    },
+    container: { flex: 1, backgroundColor: Theme.colors.background },
     header: {
-        paddingTop: 60,
-        paddingHorizontal: Theme.spacing.xl,
-        paddingBottom: 20,
-        backgroundColor: Theme.colors.background,
-        zIndex: 10,
-    },
-    progressBarContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    progressStepWrapper: {
-        flex: 1,
-        height: 6,
-        marginHorizontal: 4,
-        backgroundColor: Theme.colors.surface, // track color
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    progressStep: {
-        height: '100%',
-        backgroundColor: Theme.colors.surface,
-    },
-    progressStepActive: {
-        backgroundColor: Theme.colors.primary,
-    },
-    progressStepCurrent: {
-        backgroundColor: Theme.colors.accent,
-    },
-    headerTitle: {
-        fontFamily: Theme.fonts.brandSecondary,
-        fontSize: 28,
-        color: Theme.colors.secondary,
-    },
-    scrollContent: {
-        padding: Theme.spacing.xl,
-        paddingBottom: 100,
-    },
-    stepContent: {
-        flex: 1,
-    },
-    stepTitle: {
-        fontFamily: Theme.fonts.body,
-        fontWeight: 'bold',
-        fontSize: 20,
-        color: Theme.colors.textPrimary, // Fixed: using textPrimary
-        marginBottom: Theme.spacing.lg,
-    },
-    smartBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: Theme.colors.surface,
-        padding: 12,
-        borderRadius: Theme.radius.lg,
-        marginBottom: 20,
-        borderLeftWidth: 3,
-        borderLeftColor: Theme.colors.primary,
-    },
-    smartText: {
-        marginLeft: 8,
-        color: Theme.colors.primary,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    optionCard: {
-        backgroundColor: 'white',
-        padding: Theme.spacing.lg,
-        borderRadius: Theme.radius.xl,
-        marginBottom: Theme.spacing.md,
-        borderWidth: 1,
-        borderColor: 'transparent',
-        ...Theme.shadows.light,
-        flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        paddingTop: 52,
+        paddingBottom: 16,
+        paddingHorizontal: 16,
     },
-    optionCardActive: {
-        borderColor: Theme.colors.primary,
-        backgroundColor: '#FFF8F0', // lighter primary
-    },
-    optionRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        flex: 1,
-        alignItems: 'center',
-    },
-    optionText: {
-        fontSize: 16,
-        color: Theme.colors.textSecondary,
-        fontWeight: '500',
-    },
-    optionTextActive: {
-        color: Theme.colors.primary,
-        fontWeight: 'bold',
-    },
-    input: {
-        backgroundColor: 'white',
-        height: 56,
-        borderRadius: Theme.radius.lg,
-        paddingHorizontal: Theme.spacing.lg,
-        fontSize: 16,
-        marginBottom: Theme.spacing.xl,
-        borderWidth: 1,
-        borderColor: Theme.colors.surface,
-        color: Theme.colors.textPrimary,
-        ...Theme.shadows.light,
-    },
-    imagePickerButton: {
-        backgroundColor: 'white',
-        height: 56,
-        borderRadius: Theme.radius.lg,
-        paddingHorizontal: Theme.spacing.lg,
-        marginBottom: Theme.spacing.xl,
-        borderWidth: 1,
-        borderColor: Theme.colors.primary + '40',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...Theme.shadows.light,
-    },
-    imagePickerText: {
-        fontSize: 16,
-        color: Theme.colors.primary,
-        fontWeight: '500',
-        marginLeft: 12,
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: Theme.colors.textSecondary,
-    },
-    checkboxActive: {
-        backgroundColor: Theme.colors.primary,
-        borderColor: Theme.colors.primary,
-    },
-    summaryCard: {
-        backgroundColor: 'white',
-        borderRadius: Theme.radius.xl,
-        padding: 24,
-        ...Theme.shadows.medium,
-    },
-    summaryRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 12,
-    },
-    summaryLabel: {
-        color: Theme.colors.textSecondary,
-        fontSize: 15,
-    },
-    summaryValue: {
-        color: Theme.colors.textPrimary,
-        fontWeight: '600',
-        fontSize: 15,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: Theme.colors.surface,
-        marginVertical: 16,
-    },
-    totalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    totalLabel: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: Theme.colors.textSecondary,
-    },
-    totalValue: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: Theme.colors.primary,
-    },
-    magicTitle: {
-        fontSize: 24,
-        fontFamily: Theme.fonts.brand,
-        color: Theme.colors.primary,
-        marginTop: 12,
-    },
-    disclaimer: {
-        textAlign: 'center',
-        marginTop: 20,
-        color: Theme.colors.textSecondary,
-        fontSize: 12,
-        opacity: 0.7,
-    },
-    footer: {
-        flexDirection: 'row',
-        padding: Theme.spacing.xl,
-        paddingBottom: 40,
-        backgroundColor: 'white',
-        borderTopWidth: 1,
-        borderTopColor: Theme.colors.surface,
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+    headerTitle: { ...T.h3, color: Theme.colors.white },
+    scrollContent: { paddingBottom: 100 },
+    stepContainer: { paddingHorizontal: 20, paddingTop: 8 },
+    stepTitle: { ...T.h2, marginBottom: 4 },
+    stepSubtitle: { ...T.bodySmall, marginBottom: 20 },
+    stepActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+
+    // Event Grid
+    eventGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'center' },
+
+    // Guest Section
+    guestSection: { backgroundColor: Theme.colors.surfaceElevated, borderRadius: Theme.radius.lg, padding: 20, marginBottom: 20, ...Theme.elevation.xs },
+    guestHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+    guestLabel: { ...T.h3, fontSize: 16 },
+    guestControl: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+    guestBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: Theme.colors.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Theme.colors.border },
+    guestBtnText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: Theme.colors.textPrimary },
+    guestCount: { fontFamily: 'Merriweather_700Bold', fontSize: 32, color: Theme.colors.primary, minWidth: 60, textAlign: 'center' },
+
+    // Date
+    dateButton: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: Theme.colors.surfaceElevated, borderRadius: Theme.radius.md, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: Theme.colors.border },
+    dateLabel: { ...T.label, marginBottom: 2 },
+    dateValue: { ...T.body, fontFamily: 'Poppins_500Medium' },
+
+    // Image
+    imageButton: { marginBottom: 8, borderRadius: Theme.radius.md, overflow: 'hidden' },
+    imagePlaceholder: { height: 80, backgroundColor: Theme.colors.surface, borderRadius: Theme.radius.md, borderWidth: 1.5, borderColor: Theme.colors.border, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', gap: 6, flexDirection: 'row' },
+    imageText: { ...T.bodySmall, color: Theme.colors.textTertiary },
+    refImage: { width: '100%', height: 120, borderRadius: Theme.radius.md },
+
+    // Receipt
+    receipt: { backgroundColor: Theme.colors.surfaceElevated, borderRadius: Theme.radius.lg, padding: 20, marginBottom: 24, ...Theme.elevation.sm },
+    receiptRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+    receiptLabel: { ...T.bodySmall, flex: 1 },
+    receiptValue: { ...T.body, fontFamily: 'Poppins_500Medium', textAlign: 'right' },
+    divider: { height: 1, backgroundColor: Theme.colors.border, marginVertical: 10 },
+    receiptTotalLabel: { ...T.h3, fontSize: 16 },
+    receiptTotalValue: { ...T.priceLarge, fontSize: 24 },
+
+    // Contact
+    contactSection: { marginBottom: 20 },
+    contactTitle: { ...T.h3, fontSize: 16, marginBottom: 16 },
+
+    // Estimator
+    estimator: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-    },
-    backButton: {
-        padding: 12,
-        borderRadius: Theme.radius.full,
-        backgroundColor: Theme.colors.surface,
-    },
-    nextButton: {
-        backgroundColor: Theme.colors.primary,
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: Theme.radius.full,
-        ...Theme.shadows.medium,
+        backgroundColor: Theme.colors.surfaceElevated,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderTopWidth: 1,
+        borderTopColor: Theme.colors.border,
+        ...Theme.elevation.md,
     },
-    nextText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginRight: 8,
-    },
-    summaryTotalLabel: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-    summaryTotalValue: { fontSize: 24, fontWeight: 'bold', color: 'white' },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: 'white', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '70%', padding: 24 },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold', color: Theme.colors.primary },
-    modalCloseText: { fontSize: 16, color: '#E57373', fontWeight: 'bold' },
-    dateItem: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-    dateItemActive: { backgroundColor: '#fef3e2', borderRadius: 8, paddingHorizontal: 16, borderBottomWidth: 0 },
-    dateItemBlocked: { opacity: 0.5 },
-    dateText: { fontSize: 16, color: '#333' },
-    dateTextActive: { fontWeight: 'bold', color: Theme.colors.primary },
-    dateTextBlocked: { color: '#999', textDecorationLine: 'line-through' }
+    estimatorLabel: { ...T.label },
+    estimatorPrice: { ...T.price, fontSize: 20 },
+    estimatorDetail: { ...T.bodySmall },
 });
