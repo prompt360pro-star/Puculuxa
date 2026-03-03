@@ -117,6 +117,53 @@ async function main() {
         },
     });
 
+    // 6. Create Base Financial Configs for Angola (FASE 11C)
+    // B2C Default
+    await (prisma as any).paymentTermsConfig.upsert({
+        where: { segment_eventType: { segment: 'B2C', eventType: null } },
+        update: {},
+        create: {
+            segment: 'B2C',
+            depositPercent: 50,
+            depositDueDays: 1,
+            balanceDueDays: 3,
+            allowGpo: true,
+            allowBankTransfer: true,
+            allowCredit: false,
+        },
+    });
+
+    // B2B Default
+    await (prisma as any).paymentTermsConfig.upsert({
+        where: { segment_eventType: { segment: 'B2B', eventType: null } },
+        update: {},
+        create: {
+            segment: 'B2B',
+            depositPercent: 50,
+            depositDueDays: 3,
+            balanceDueDays: 15,
+            allowGpo: true,
+            allowBankTransfer: true,
+            allowCredit: false,
+        },
+    });
+
+    // GOVERNMENT Default
+    await (prisma as any).paymentTermsConfig.upsert({
+        where: { segment_eventType: { segment: 'GOVERNMENT', eventType: null } },
+        update: {},
+        create: {
+            segment: 'GOVERNMENT',
+            depositPercent: 0,
+            depositDueDays: 0,
+            balanceDueDays: 0,
+            creditDueDays: 60,
+            allowGpo: false,
+            allowBankTransfer: true,
+            allowCredit: true,
+        },
+    });
+
     console.log('Seed completed successfully!');
 }
 

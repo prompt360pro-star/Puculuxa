@@ -20,6 +20,34 @@ enum PaymentMethod {
   CASH
 }
 
+enum FollowUpChannel {
+  PHONE
+  EMAIL
+  WHATSAPP
+  IN_PERSON
+  DOCUMENT
+  OTHER
+}
+
+enum FollowUpOutcome {
+  NO_RESPONSE
+  PROMISED_PAYMENT
+  REQUESTED_DOCUMENTS
+  SENT_TO_TREASURY
+  ORDER_OF_WITHDRAWAL_PENDING
+  PAID_CONFIRMED
+  OTHER
+}
+
+enum WhatsAppMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
 enum PaymentStatus {
   PENDING
   AWAITING_PROOF
@@ -52,25 +80,53 @@ enum PaymentReminderType {
   CREDIT_OVERDUE
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum ClientSegment {
+  B2C
+  B2B
+  GOVERNMENT
+}
+
+enum PayoutProvider {
+  APPYPAY
+}
+
+enum PayoutStatus {
+  DRAFT // criado internamente, ainda não conciliado
+  REPORTED // lançado manualmente com valores do portal AppyPay
+  PAID // confirmado no banco (BAI)
+  DISCREPANCY // há diferença entre gross/fees/net vs soma dos items
+  CANCELLED
+}
+
+enum PayoutSource {
+  MANUAL
+  API
+}
+
 // ─────────────────────────────────────────────
 // PRODUCT
 // ─────────────────────────────────────────────
 model Product {
-  id              String   @id @default(cuid())
+  id              String          @id @default(cuid())
   name            String
   description     String?
-  price           Float?   // null = "sob consulta"
+  price           Float? // null = "sob consulta"
   category        String
   image           String?
   tags            String?
-  servings        Int?     // porções por unidade
-  prepTimeDays    Int?     // dias de preparação
-  suggestedEvents String?  // JSON: ["casamento","aniversario"]
-  popularityScore Int      @default(0)
-  complexityBase  Int      @default(1) // 1-5
+  servings        Int? // porções por unidade
+  prepTimeDays    Int? // dias de preparação
+  suggestedEvents String? // JSON: ["casamento","aniversario"]
+  popularityScore Int             @default(0)
+  complexityBase  Int             @default(1) // 1-5
   deletedAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   orderItems      OrderItem[]
   quotationItems  QuotationItem[]
   reviews         Review[]
@@ -84,42 +140,43 @@ model Product {
 // QUOTATION (expandido v3.1)
 // ─────────────────────────────────────────────
 model Quotation {
-  id               String    @id @default(cuid())
-  eventType        String
-  guestCount       Int
-  eventDate        DateTime?
-  description      String?              // "bolo unicórnio 3 andares"
-  referenceImage   String?
-  complexityScore  Int?                  // 1-5 calculado
-  source           String    @default("APP") // APP | WHATSAPP_IMPORT | ADMIN_CREATED | INSTAGRAM
+  id              String    @id @default(cuid())
+  eventType       String
+  guestCount      Int
+  eventDate       DateTime?
+  description     String? // "bolo unicórnio 3 andares"
+  referenceImage  String?
+  complexityScore Int? // 1-5 calculado
+  source          String    @default("APP") // APP | WHATSAPP_IMPORT | ADMIN_CREATED | INSTAGRAM
   // Status: DRAFT | SUBMITTED | IN_REVIEW | PROPOSAL_SENT | NEGOTIATING | ACCEPTED | REJECTED | EXPIRED | CONVERTED
-  status           String    @default("SUBMITTED")
-  estimatedTotal   Float                 // cálculo automático inicial
-  notes            String?              // notas internas admin
+  status          String    @default("SUBMITTED")
+  estimatedTotal  Float // cálculo automático inicial
+  notes           String? // notas internas admin
 
   // SLA
-  slaDeadline      DateTime?
-  escalatedAt      DateTime?
+  slaDeadline DateTime?
+  escalatedAt DateTime?
 
   // Conversão
   convertedOrderId String?
 
   // Cliente
-  customerName     String?
-  customerPhone    String?
-  customerId       String?
-  customer         User?     @relation(fields: [customerId], references: [id])
+  customerName  String?
+  customerPhone String?
+  customerId    String?
+  customer      User?   @relation(fields: [customerId], references: [id])
 
   // Relações
-  versions         QuotationVersion[]
-  complements      QuotationComplement[]
-  items            QuotationItem[]
-  auditLog         StatusAuditLog[]
+  versions    QuotationVersion[]
+  complements QuotationComplement[]
+  items       QuotationItem[]
+  auditLog    StatusAuditLog[]
+  convertedOrder Order?
 
-  rejectionReason  String?
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  rejectionReason String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([status])
   @@index([customerId])
@@ -136,9 +193,9 @@ model QuotationVersion {
   quotation   Quotation @relation(fields: [quotationId], references: [id])
   version     Int
   price       Float
-  response    String?              // mensagem ao cliente
-  changedBy   String               // ADMIN | CUSTOMER
-  changes     String?              // resumo da alteração
+  response    String? // mensagem ao cliente
+  changedBy   String // ADMIN | CUSTOMER
+  changes     String? // resumo da alteração
   // Status: PENDING | ACCEPTED | SUPERSEDED
   status      String    @default("PENDING")
   createdAt   DateTime  @default(now())
@@ -153,8 +210,8 @@ model QuotationComplement {
   id          String    @id @default(cuid())
   quotationId String
   quotation   Quotation @relation(fields: [quotationId], references: [id])
-  name        String               // "Cupcakes Decorados"
-  type        String               // PER_UNIT | PER_GUEST | FIXED
+  name        String // "Cupcakes Decorados"
+  type        String // PER_UNIT | PER_GUEST | FIXED
   unitPrice   Float
   quantity    Int       @default(1)
   subtotal    Float
@@ -181,16 +238,16 @@ model QuotationItem {
   @@index([productId])
 }
 
-// ─────────────────────────────────────────────
-// STATUS AUDIT LOG (auditoria de transições)
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────
+// STATUS AUDIT LOG (auditoria de transições de cotação)
+// ─────────────────────────────────────────────────────
 model StatusAuditLog {
   id          String    @id @default(cuid())
   quotationId String
   quotation   Quotation @relation(fields: [quotationId], references: [id])
   fromStatus  String
   toStatus    String
-  changedBy   String               // userId ou "SYSTEM"
+  changedBy   String // userId ou "SYSTEM"
   reason      String?
   createdAt   DateTime  @default(now())
 
@@ -219,7 +276,7 @@ model SlaConfig {
   id            String @id @default(cuid())
   eventType     String @unique
   deadlineHours Int    @default(2)
-  businessStart Int    @default(8)  // 08:00
+  businessStart Int    @default(8) // 08:00
   businessEnd   Int    @default(20) // 20:00
 }
 
@@ -230,7 +287,7 @@ model EventReminder {
   id            String   @id @default(cuid())
   userId        String
   user          User     @relation(fields: [userId], references: [id])
-  eventName     String               // "Aniversário da Sofia"
+  eventName     String // "Aniversário da Sofia"
   eventType     String
   eventDate     DateTime
   nextReminder  DateTime
@@ -258,7 +315,7 @@ model User {
   city         String?
   resetToken   String?
   refreshToken String?
-  pushToken    String?          // Expo push token for mobile notifications
+  pushToken    String? // Expo push token for mobile notifications
   deletedAt    DateTime?
   quotations   Quotation[]
   orders       Order[]
@@ -276,30 +333,47 @@ model User {
 // ORDER (FASE 9A — camada financeira)
 // ─────────────────────────────────────────────
 model Order {
-  id              String           @id @default(cuid())
+  id              String          @id @default(cuid())
   userId          String
-  user            User             @relation(fields: [userId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
   items           OrderItem[]
   total           Float
-  status          String           @default("PENDING")
-  financialStatus FinancialStatus  @default(UNPAID)
+  status          String          @default("PENDING")
+  financialStatus FinancialStatus @default(UNPAID)
   paymentMode     PaymentMethod?
   feedback        Feedback?
   payments        Payment[]
   invoices        Invoice[]
   deletedAt       DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+
+  // Histórico de Conversão
+  convertedFromId String?   @unique
+  quotation       Quotation? @relation(fields: [convertedFromId], references: [id])
 
   // ─── Campos de Crédito Institucional (FASE 9D) ───
-  creditDueDate           DateTime?                  // prazo acordado para pagamento
-  creditApprovedAt        DateTime?
-  creditApprovedById      String?                    // admin userId que aprovou
-  creditNotes             String?                    // observações livres
-  debtorEntityName        String?                    // ex: Ministério da Educação
-  debtorEntityNif         String?                    // NIF da entidade
-  debtorProcessRef        String?                    // ex: Proc. nº 2026/MINEA/0042
-  lastPaymentFollowUpAt   DateTime?                  // data do último follow-up
+  creditDueDate         DateTime? // prazo acordado para pagamento
+  creditApprovedAt      DateTime?
+  creditApprovedById    String? // admin userId que aprovou
+  creditNotes           String? // observações livres
+  debtorEntityName      String? // ex: Ministério da Educação
+  debtorEntityNif       String? // NIF da entidade
+  debtorProcessRef      String? // ex: Proc. nº 2026/MINEA/0042
+  lastPaymentFollowUpAt DateTime? // data do último follow-up
+
+  // Termos Financeiros e Configurações de Pagamento (Snapshots 11C)
+  clientSegment         ClientSegment @default(B2C)
+  depositPercentApplied Int?         // Ex: 50%
+  depositAmount         Float?       // valor do sinal (total * percent)
+  depositDueDate        DateTime?    // prazo limite para pagar o sinal
+  balanceDueDate        DateTime?    // prazo limite para liquidar o resto
+  termsAppliedAt        DateTime?    // quando os termos foram congelados neste Order
+  termsAppliedById      String?      // admin que forçou/aplicou (se manual)
+
+  followUpLogs          PaymentFollowUpLog[]
+  whatsappLogs          WhatsAppLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([userId])
@@ -307,6 +381,9 @@ model Order {
   @@index([financialStatus])
   @@index([creditDueDate])
   @@index([paymentMode])
+  @@index([clientSegment])
+  @@index([depositDueDate])
+  @@index([balanceDueDate])
 }
 
 model OrderItem {
@@ -327,16 +404,16 @@ model OrderItem {
 // FEEDBACK, CHAT, REVIEW, PAYMENT, LOYALTY
 // ─────────────────────────────────────────────
 model Feedback {
-  id         String   @id @default(cuid())
-  orderId    String   @unique
-  order      Order    @relation(fields: [orderId], references: [id])
+  id         String    @id @default(cuid())
+  orderId    String    @unique
+  order      Order     @relation(fields: [orderId], references: [id])
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  rating     Int      // 1-5
+  user       User      @relation(fields: [userId], references: [id])
+  rating     Int // 1-5
   comment    String?
   adminReply String?
   repliedAt  DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId])
   @@index([rating])
@@ -373,38 +450,95 @@ model Review {
 // PAYMENT (FASE 9A — expandido)
 // ─────────────────────────────────────────────
 model Payment {
-  id              String        @id @default(cuid())
-  orderId         String
-  order           Order         @relation(fields: [orderId], references: [id])
-  amount          Float
-  method          PaymentMethod
-  status          PaymentStatus @default(PENDING)
-  providerRef     String?       @unique               // ref do gateway (AppyPay)
-  merchantRef     String?       @unique               // ref interna Puculuxa
-  idempotencyKey  String?       @unique      // previne duplicação de webhook
-  proofUrl        String?                    // comprovativo de transferência
-  metadata        Json?                      // dados extra do gateway
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  orderId        String
+  order          Order         @relation(fields: [orderId], references: [id])
+  amount         Float
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  providerRef    String?       @unique // ref do gateway (AppyPay)
+  merchantRef    String?       @unique // ref interna Puculuxa
+  idempotencyKey String?       @unique // previne duplicação de webhook
+  proofUrl       String? // comprovativo de transferência
+  metadata       Json? // dados extra do gateway
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  payoutItem     PayoutItem?
 
   @@index([orderId])
   @@index([status])
 }
 
 // ─────────────────────────────────────────────
+// PAYOUT (FASE 11A — Tracking Settlement/AppyPay)
+// ─────────────────────────────────────────────
+model Payout {
+  id       String         @id @default(cuid())
+  provider PayoutProvider @default(APPYPAY)
+  source   PayoutSource   @default(MANUAL)
+  status   PayoutStatus   @default(DRAFT)
+
+  // Identificador do payout/settlement no provider (se existir)
+  providerPayoutRef String? @unique
+
+  currency String @default("AOA")
+
+  // Totais do settlement
+  grossAmount Float @default(0) // soma payments brutos incluídos
+  feeAmount   Float @default(0) // comissão do gateway
+  netAmount   Float @default(0) // gross - fee (ou valor liquidado)
+
+  // Janela de settlement (útil para auditoria)
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  // Conciliação bancária (BAI)
+  bankName      String? // default "Banco BAI"
+  bankIban      String? // default IBAN Puculuxa
+  bankReference String? // referência do depósito/transferência no extrato
+  valueDate     DateTime? // data-valor no banco
+  statementUrl  String? // opcional: upload do comprovativo/extrato
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PayoutItem[]
+
+  @@index([status])
+  @@index([provider])
+  @@index([periodStart])
+  @@index([periodEnd])
+  @@index([valueDate])
+}
+
+model PayoutItem {
+  id        String   @id @default(cuid())
+  payoutId  String
+  payout    Payout   @relation(fields: [payoutId], references: [id])
+  paymentId String   @unique
+  // O tipo do Payment referenciado aqui evita que a tabela de Payment suje com colunas extras
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  amount    Float
+  createdAt DateTime @default(now())
+
+  @@index([payoutId])
+}
+
+// ─────────────────────────────────────────────
 // PAYMENT REMINDER LOG (FASE 10D)
 // ─────────────────────────────────────────────
 model PaymentReminderLog {
-  id          String              @id @default(cuid())
-  type        PaymentReminderType
-  channel     ReminderChannel     @default(PUSH)
-  orderId     String?
-  paymentId   String?
-  userId      String?            // customer userId se aplicável
-  target      String?            // ex: phone/email se necessário
-  sentAt      DateTime            @default(now())
-  meta        Json?
-  
+  id        String              @id @default(cuid())
+  type      PaymentReminderType
+  channel   ReminderChannel     @default(PUSH)
+  orderId   String?
+  paymentId String?
+  userId    String? // customer userId se aplicável
+  target    String? // ex: phone/email se necessário
+  sentAt    DateTime            @default(now())
+  meta      Json?
+
   @@index([type])
   @@index([orderId])
   @@index([paymentId])
@@ -415,18 +549,18 @@ model PaymentReminderLog {
 // INVOICE (FASE 9C-1 — numeração configurável AGT)
 // ─────────────────────────────────────────────
 model Invoice {
-  id              String   @id @default(cuid())
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id])
-  invoiceNumber   String   @unique
-  prefix          String?                    // ex: PF, FT, NE
-  year            Int?                       // ex: 2025
-  sequenceNumber  Int?                       // ex: 347
-  totalAmount     Float
-  issuedAt        DateTime @default(now())
-  dueDate         DateTime?
-  isGovernment    Boolean  @default(false)
-  createdAt       DateTime @default(now())
+  id             String    @id @default(cuid())
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id])
+  invoiceNumber  String    @unique
+  prefix         String? // ex: PF, FT, NE
+  year           Int? // ex: 2025
+  sequenceNumber Int? // ex: 347
+  totalAmount    Float
+  issuedAt       DateTime  @default(now())
+  dueDate        DateTime?
+  isGovernment   Boolean   @default(false)
+  createdAt      DateTime  @default(now())
 
   @@index([orderId])
 }
@@ -436,10 +570,10 @@ model Invoice {
 // ─────────────────────────────────────────────
 model InvoiceConfig {
   id         String   @id @default(cuid())
-  prefix     String   @default("PF")           // PF=Pró-forma, FT=Fatura, NE=Nota Encomenda
+  prefix     String   @default("PF") // PF=Pró-forma, FT=Fatura, NE=Nota Encomenda
   year       Int
   nextNumber Int      @default(1)
-  padding    Int      @default(5)              // 00001
+  padding    Int      @default(5) // 00001
   format     String   @default("{prefix} {year}/{number}")
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
@@ -457,4 +591,71 @@ model LoyaltyPoints {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT FOLLOW-UP LOG (FASE 11D)
+// ─────────────────────────────────────────────
+
+model PaymentFollowUpLog {
+  id             String          @id @default(cuid())
+  orderId        String
+  order          Order           @relation(fields: [orderId], references: [id])
+  createdById    String
+  channel        FollowUpChannel @default(PHONE)
+  outcome        FollowUpOutcome @default(OTHER)
+  note           String          @db.Text
+  nextFollowUpAt DateTime?
+  attachmentUrl  String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@index([nextFollowUpAt])
+  @@map("payment_followup_logs")
+}
+
+// ─────────────────────────────────────────────
+// WHATSAPP API LOGGING (FASE 12A)
+// ─────────────────────────────────────────────
+model WhatsAppLog {
+  id              String                @id @default(cuid())
+
+  // Contexto para auditoria
+  orderId         String?
+  order           Order?                @relation(fields: [orderId], references: [id])
+
+  recipientPhone  String
+  templateName    String
+  languageCode    String                @default("pt_PT")
+
+  status          WhatsAppMessageStatus @default(PENDING)
+
+  // IDs Meta Graph
+  waMessageId     String?               @unique // wamid.xxx
+  conversationId  String?
+  webhookStatusRaw Json?
+
+  // Anti-spam/idempotência
+  idempotencyKey  String?               @unique
+
+  // Payload para retry real
+  variables       Json?
+
+  errorMessage    String?
+
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  readAt          DateTime?
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([orderId])
+  @@index([recipientPhone])
+  @@index([templateName])
+  @@index([status])
+  @@index([createdAt])
+  @@map("whatsapp_logs")
 }

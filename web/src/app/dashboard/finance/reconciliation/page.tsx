@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { reconciliationService } from '@/services/reconciliationService';
-import { FileText, CheckCircle, XCircle, AlertTriangle, ExternalLink, Calendar, Search } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, AlertTriangle, ExternalLink, Calendar, MessageCircle } from 'lucide-react';
+import Link from 'next/link';
 
 function formatKz(value: number) {
     return new Intl.NumberFormat('pt-AO', {
@@ -241,18 +242,27 @@ export default function ReconciliationPage() {
                                         <span>Venceu a: {new Date(credit.creditDueDate).toLocaleDateString('pt-PT')}</span>
                                     </div>
 
-                                    <div className="mt-auto pt-4 border-t border-border-main flex items-center justify-between">
+                                    <div className="mt-auto pt-4 border-t border-border-main flex items-center justify-between gap-2">
                                         <span className="text-xl font-black text-puculuxa-orange">
                                             {formatKz(credit.total)}
                                         </span>
 
-                                        <button
-                                            onClick={() => handleMarkCreditPaid(credit.id)}
-                                            disabled={markPaidMutation.isPending}
-                                            className="px-4 py-2 bg-text-primary text-bg-main text-sm font-bold rounded-xl hover:bg-text-secondary transition-colors disabled:opacity-50"
-                                        >
-                                            Liquidar
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <Link
+                                                href={`/dashboard/finance/followups?orderId=${credit.id}`}
+                                                className="flex items-center gap-1.5 px-3 py-2 border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 text-xs font-bold rounded-xl transition-colors"
+                                                title="Abrir painel WhatsApp para este crédito"
+                                            >
+                                                <MessageCircle size={14} /> WhatsApp
+                                            </Link>
+                                            <button
+                                                onClick={() => handleMarkCreditPaid(credit.id)}
+                                                disabled={markPaidMutation.isPending}
+                                                className="px-4 py-2 bg-text-primary text-bg-main text-sm font-bold rounded-xl hover:bg-text-secondary transition-colors disabled:opacity-50"
+                                            >
+                                                Liquidar
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );

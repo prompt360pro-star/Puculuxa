@@ -13,6 +13,7 @@ import {
     RefreshCw,
     Building2,
     CheckCircle,
+    PhoneCall,
 } from 'lucide-react';
 import { getFinanceData, FinanceDashboardData } from '@/services/financeService';
 
@@ -187,6 +188,41 @@ export default function FinanceDashboard() {
                     <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
                     Atualizar
                 </button>
+            </div>
+
+            {/* ─── Links Rápidos ─── */}
+            <div className="flex gap-4 mb-2">
+                <Link
+                    href="/dashboard/finance/reconciliation"
+                    className="flex-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-700 border border-indigo-200/50 rounded-2xl p-4 flex items-center justify-between transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-600/20 rounded-lg">
+                            <Upload className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">Reconciliação</p>
+                            <p className="text-xs opacity-80">Aprovar Transferências Bancárias</p>
+                        </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 opacity-50" />
+                </Link>
+
+                <Link
+                    href="/dashboard/finance/followups"
+                    className="flex-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 border border-amber-200/50 rounded-2xl p-4 flex items-center justify-between transition-colors"
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500/20 rounded-lg">
+                            <PhoneCall className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">CRM Institucional</p>
+                            <p className="text-xs opacity-80">Auditar dívidas B2B e Estado</p>
+                        </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 opacity-50" />
+                </Link>
             </div>
 
             {/* ─── 4 KPI Cards ─── */}

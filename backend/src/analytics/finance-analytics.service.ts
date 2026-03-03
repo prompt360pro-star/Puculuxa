@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PayoutService } from '../payment/payout.service';
 
 @Injectable()
 export class FinanceAnalyticsService {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly payoutService: PayoutService,
+    ) { }
 
     async getFinanceDashboard() {
         const now = new Date();
@@ -19,6 +23,8 @@ export class FinanceAnalyticsService {
             allOrders,
             awaitingProofPayments,
             recentPayments,
+            unsettledTotals,
+            unsettledOlderThan7dCount,
         ] = await Promise.all([
             // Cash received this month
             this.prisma.payment.aggregate({
@@ -80,6 +86,19 @@ export class FinanceAnalyticsService {
                 orderBy: { createdAt: 'desc' },
                 take: 10,
                 select: { id: true, orderId: true, amount: true, method: true, status: true, createdAt: true },
+            }),
+            // Unsettled totals computation (from PayoutService)
+            this.payoutService.computeUnsettledTotals(),
+            // Unsettled > 7 days action item
+            this.prisma.payment.count({
+                where: {
+                    status: 'SUCCESS',
+                    method: { in: ['APPYPAY_GPO', 'APPYPAY_REF'] },
+                    createdAt: { lt: new Date(now.getTime() - 7 * 86_400_000) },
+                    payoutItem: {
+                        is: null
+                    }
+                }
             }),
         ]);
 
@@ -148,6 +167,8 @@ export class FinanceAnalyticsService {
                 receivablesOverdue: overdueOrders._sum.total ?? 0,
                 creditExposure: creditOrders._sum.total ?? 0,
                 avgDaysToPay,
+                unsettledGatewayBalance: unsettledTotals.unsettledGross,
+                unsettledCount: unsettledTotals.unsettledCount,
             },
             breakdown: {
                 byPaymentMode,
@@ -170,6 +191,7 @@ export class FinanceAnalyticsService {
                     creditDueDate: o.creditDueDate?.toISOString() ?? null,
                     total: o.total,
                 })),
+                unsettledOlderThan7d: unsettledOlderThan7dCount,
             },
             recent: {
                 payments: recentPayments.map((p) => ({

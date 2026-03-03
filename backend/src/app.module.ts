@@ -19,6 +19,8 @@ import { EventsModule } from './events/events.module';
 import { ChatModule } from './chat/chat.module';
 import { HealthModule } from './health/health.module';
 import { PaymentModule } from './payment/payment.module';
+import { ExportModule } from './exports/export.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { APP_FILTER } from '@nestjs/core';
 import { SentryExceptionFilter } from './common/sentry-exception.filter';
 
@@ -84,6 +86,8 @@ const bullModuleConfig = useRedis
     ChatModule,
     HealthModule,
     PaymentModule,
+    ExportModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [

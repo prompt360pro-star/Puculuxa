@@ -27,6 +27,7 @@ import { InvoiceService } from './invoice.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { PUCULUXA_BANK_DETAILS } from './constants/bank-details';
+import { PaymentTermsService } from './payment-terms.service';
 
 // ─── DTOs ───
 class InitiateGpoDto {
@@ -52,7 +53,25 @@ export class PaymentController {
         private readonly invoiceService: InvoiceService,
         private readonly prisma: PrismaService,
         private readonly events: EventsGateway,
+        private readonly paymentTermsService: PaymentTermsService,
     ) { }
+
+    // ─── a0) Resumo Financeiro da Encomenda ───
+    @UseGuards(JwtAuthGuard)
+    @Get('order/:orderId/summary')
+    async getOrderSummary(@Param('orderId') orderId: string, @Req() req: Request) {
+        const userId = (req as any).user?.id || (req as any).user?.sub;
+        const userRole = (req as any).user?.role;
+
+        const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+        if (!order) throw new NotFoundException(`Order não encontrada`);
+
+        if (userRole === 'CUSTOMER' && order.userId !== userId) {
+            throw new ForbiddenException('Não tem permissão para aceder ao sumário financeiro deste pedido');
+        }
+
+        return this.paymentTermsService.getOrderPaymentSummary(orderId);
+    }
 
     // ─── a) Iniciar pagamento Multicaixa Express (GPO) ───
     @UseGuards(JwtAuthGuard)

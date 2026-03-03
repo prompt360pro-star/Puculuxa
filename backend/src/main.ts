@@ -20,6 +20,14 @@ async function bootstrap() {
       console.error('FATAL LOG: APPYPAY_WEBHOOK_SECRET is required in production environments to secure webhooks.');
       process.exit(1);
     }
+
+    if (!process.env.WHATSAPP_VERIFY_TOKEN) {
+      console.error('FATAL LOG: WHATSAPP_VERIFY_TOKEN is missing. Meta webhooks will fail verification.');
+    }
+
+    if (!process.env.WHATSAPP_APP_SECRET) {
+      console.error('FATAL LOG: WHATSAPP_APP_SECRET is missing. Cannot verify webhook signatures.');
+    }
   }
 
   app.use(helmet());

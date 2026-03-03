@@ -9,13 +9,20 @@ import { InvoiceConfigController } from './invoice-config.controller';
 import { CreditController } from './credit.controller';
 import { PaymentReminderController } from './payment-reminder.controller';
 import { PaymentReminderService } from './payment-reminder.service';
+import { PayoutController } from './payout.controller';
+import { PayoutService } from './payout.service';
+import { PaymentTermsService } from './payment-terms.service';
+import { PaymentTermsController } from './payment-terms.controller';
+import { FollowUpService } from './followup.service';
+import { FollowUpController } from './followup.controller';
 import { DatabaseModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
-    imports: [DatabaseModule, EventsModule],
-    controllers: [PaymentController, WebhookController, InvoiceConfigController, CreditController, PaymentReminderController],
-    providers: [AppyPayProvider, PaymentService, InvoiceService, CreditService, PaymentReminderService],
-    exports: [PaymentService, InvoiceService, CreditService, PaymentReminderService],
+    imports: [DatabaseModule, EventsModule, WhatsAppModule],
+    controllers: [PaymentController, WebhookController, InvoiceConfigController, CreditController, PaymentReminderController, PayoutController, PaymentTermsController, FollowUpController],
+    providers: [AppyPayProvider, PaymentService, InvoiceService, CreditService, PaymentReminderService, PayoutService, PaymentTermsService, FollowUpService],
+    exports: [PaymentService, InvoiceService, CreditService, PaymentReminderService, PayoutService, PaymentTermsService, FollowUpService],
 })
 export class PaymentModule { }
