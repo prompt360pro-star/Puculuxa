@@ -4,29 +4,29 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
 
+import helmet from 'helmet';
+import { initSentry } from './common/sentry.config';
+
+initSentry();
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  if (process.env.NODE_ENV === 'production') {
+    app.useLogger(['error', 'warn', 'log']);
+  }
+
+  app.use(helmet());
+
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Enable CORS for frontend access (Updated to allow Expo Go mobile devices on the network)
-  const allowedOrigins = [
-    'http://localhost:3000', // Frontend Web (Local)
-    'http://127.0.0.1:3000',
-  ];
-
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Allow requests with no origin (like Mobile Native Apps / Expo or server-to-server)
-      // or allowed explicitly local origins
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    origin: process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(',')
+      : ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Global prefix for all routes
@@ -38,8 +38,27 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
+
+  if (process.env.NODE_ENV !== 'production') {
+    const { DocumentBuilder, SwaggerModule } = await import('@nestjs/swagger');
+
+    const config = new DocumentBuilder()
+      .setTitle('Puculuxa API')
+      .setDescription('Sistema Operacional de Encomendas Inteligentes')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+
+    console.log('[Swagger] Docs available at /api/docs');
+  }
 
   // Binding a '0.0.0.0' garante que o node expõe a API não só para localhost mas para fora na rede (Wi-Fi)
   await app.listen(process.env.PORT ?? 4001, '0.0.0.0');

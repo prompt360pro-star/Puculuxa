@@ -17,6 +17,9 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { EventsModule } from './events/events.module';
 import { ChatModule } from './chat/chat.module';
+import { HealthModule } from './health/health.module';
+import { APP_FILTER } from '@nestjs/core';
+import { SentryExceptionFilter } from './common/sentry-exception.filter';
 
 const useRedis = process.env.USE_REDIS === 'true';
 
@@ -50,8 +53,19 @@ const bullModuleConfig = useRedis
   imports: [
     ThrottlerModule.forRoot([
       {
+        name: 'short',
+        ttl: 1000,
+        limit: 3,
+      },
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 20,
+      },
+      {
+        name: 'long',
         ttl: 60000,
-        limit: 50,
+        limit: 100,
       },
     ]),
     ScheduleModule.forRoot(),
@@ -67,6 +81,7 @@ const bullModuleConfig = useRedis
     AnalyticsModule,
     FeedbackModule,
     ChatModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
@@ -74,6 +89,10 @@ const bullModuleConfig = useRedis
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: SentryExceptionFilter,
     },
   ],
 })

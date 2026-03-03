@@ -62,11 +62,11 @@ export class AnalyticsService {
 
       this.prisma.$queryRaw<[{ avgHours: number | null }]>`
         SELECT AVG(
-          (julianday(p.createdAt) - julianday(s.createdAt)) * 24
+          EXTRACT(EPOCH FROM (p."createdAt" - s."createdAt")) / 3600
         ) as avgHours
         FROM StatusAuditLog s
-        INNER JOIN StatusAuditLog p ON s.quotationId = p.quotationId
-        WHERE s.toStatus = 'SUBMITTED' AND p.toStatus = 'PROPOSAL_SENT'
+        INNER JOIN StatusAuditLog p ON s."quotationId" = p."quotationId"
+        WHERE s."toStatus" = 'SUBMITTED' AND p."toStatus" = 'PROPOSAL_SENT'
       `,
 
       // 2. FUNNEL

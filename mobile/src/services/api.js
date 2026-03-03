@@ -39,7 +39,25 @@ const fetchWithAuth = async (url, options = {}) => {
         headers = { ...headers, ...options.headers };
     }
 
-    let response = await fetch(url, { ...options, headers });
+    let response;
+    try {
+        response = await fetch(url, { ...options, headers });
+
+        if (!response.ok && response.status !== 401) {
+            console.error('[API Error]', {
+                url,
+                method: options.method || 'GET',
+                status: response.status,
+            });
+        }
+    } catch (error) {
+        console.error('[Network Error]', {
+            url,
+            method: options.method || 'GET',
+            message: error.message,
+        });
+        throw error;
+    }
 
     // Automatic Token Refresh Interceptor
     if (response.status === 401) {

@@ -27,7 +27,9 @@ import {
   CreateQuotationVersionDto,
 } from './dto/create-quotation.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
+@ApiTags('Quotations')
 @Controller('quotations')
 export class QuotationController {
   constructor(
@@ -47,6 +49,7 @@ export class QuotationController {
   }
 
   // ─── Criar Orçamento ───
+  @ApiOperation({ summary: 'Submeter novo orçamento' })
   @Post()
   create(@Body() dto: CreateQuotationDto, @Req() req: Request) {
     const userId = (req as any).user?.id || null;
@@ -54,6 +57,7 @@ export class QuotationController {
   }
 
   // ─── Listar Todos (Admin, com paginação e filtro) ───
+  @ApiOperation({ summary: 'Listar orçamentos (admin)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Get()
@@ -76,6 +80,7 @@ export class QuotationController {
   }
 
   // ─── Meus Orçamentos (Mobile) ───
+  @ApiOperation({ summary: 'Listar orçamentos do cliente autenticado' })
   @UseGuards(JwtAuthGuard)
   @Get('my')
   getMyQuotations(@Req() req: Request) {

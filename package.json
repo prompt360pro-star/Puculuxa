@@ -15,7 +15,13 @@
         "dev:lite": "concurrently \"npm run start:lite --workspace=backend\" \"npm run dev:lite --workspace=web\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,magenta\" --kill-others",
         "dev:mobile": "concurrently \"npm run start --workspace=backend\" \"npm run start --workspace=mobile -- --clear --port 8081\" --names \"BACKEND-4001,EXPO-MOBILE\" --prefix-colors \"blue,cyan\" --kill-others",
         "dev:web": "npm run dev --workspace=web",
-        "dev:backend": "npm run start:dev --workspace=backend"
+        "dev:backend": "npm run start:dev --workspace=backend",
+        "docker:up": "docker compose up -d --build",
+        "docker:down": "docker compose down",
+        "docker:logs": "docker compose logs -f",
+        "docker:reset": "docker compose down -v && docker compose up -d --build",
+        "db:migrate:prod": "docker compose exec api npx prisma migrate deploy",
+        "db:seed:prod": "docker compose exec api npx prisma db seed"
     },
     "devDependencies": {
         "concurrently": "^9.2.1",

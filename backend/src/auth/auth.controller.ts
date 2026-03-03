@@ -10,16 +10,21 @@ import {
   ValidationPipe,
   UsePipes,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard, Roles } from './roles.guard';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) { }
 
+  @ApiOperation({ summary: 'Autenticação JWT' })
+  @Throttle({ short: { ttl: 60000, limit: 5 } })
   @Post('login')
   @UsePipes(new ValidationPipe())
   async login(@Body() loginDto: LoginDto) {
