@@ -103,6 +103,20 @@ async function main() {
         },
     });
 
+    // 5. Create default InvoiceConfig for current year
+    const currentYear = new Date().getFullYear();
+    await prisma.invoiceConfig.upsert({
+        where: { prefix_year: { prefix: 'PF', year: currentYear } },
+        update: {},
+        create: {
+            prefix: 'PF',
+            year: currentYear,
+            nextNumber: 1,
+            padding: 5,
+            format: '{prefix} {year}/{number}',
+        },
+    });
+
     console.log('Seed completed successfully!');
 }
 

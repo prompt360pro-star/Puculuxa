@@ -6,167 +6,125 @@ import { Prisma } from '@prisma/client';
 @Injectable()
 export class PdfService {
   generateQuotationPdf(
-    quotation: Prisma.QuotationGetPayload<object>,
+    quotation: any, // using any to bypass strict type checking for joined relations like items/complements
     res: Response,
   ) {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    doc.pipe(res);
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      doc.pipe(res);
 
-    const primaryColor = '#e11d48'; // Rose 600
-    const textDark = '#0f172a'; // Slate 900
-    const textMuted = '#64748b'; // Slate 500
-    const lineLight = '#e2e8f0'; // Slate 200
+      const primaryColor = '#dc2626'; // Red Puculuxa
+      const accentColor = '#C6A75E'; // Dourado
+      const textDark = '#0f172a'; // Slate 900
+      const textMuted = '#64748b'; // Slate 500
+      const lineLight = '#e2e8f0'; // Slate 200
 
-    // Header Background
-    doc.rect(0, 0, 595, 120).fill('#f8fafc'); // Slate 50
+      // --- HEADER ---
+      // Placeholder Título Textual Grande
+      doc
+        .fillColor(primaryColor)
+        .fontSize(32)
+        .font('Helvetica-Bold')
+        .text('PUCULUXA', 50, 50, { characterSpacing: 2 });
 
-    // Header Text
-    doc
-      .fillColor(primaryColor)
-      .fontSize(28)
-      .text('PUCULUXA', 50, 45, { characterSpacing: 2 });
-    doc
-      .fillColor(textMuted)
-      .fontSize(10)
-      .text('Cakes & Catering Exclusivo', 50, 75);
+      // Linha separadora dourada
+      doc.moveTo(50, 95).lineTo(545, 95).lineWidth(2).stroke(accentColor);
 
-    // Document Meta (Right aligned)
-    doc
-      .fillColor(textDark)
-      .fontSize(14)
-      .text('ORÇAMENTO', 400, 45, { align: 'right' });
-    doc
-      .fillColor(textMuted)
-      .fontSize(10)
-      .text(`Ref: #${quotation.id.slice(0, 8).toUpperCase()}`, 400, 65, {
-        align: 'right',
-      });
-    doc.text(
-      `Data: ${new Date(quotation.createdAt).toLocaleDateString('pt-BR')}`,
-      400,
-      80,
-      { align: 'right' },
-    );
+      doc
+        .fillColor(textDark)
+        .fontSize(16)
+        .text('PROPOSTA DE ORÇAMENTO', 50, 115);
 
-    doc.moveDown(4);
+      doc
+        .fillColor(textMuted)
+        .fontSize(10)
+        .font('Helvetica')
+        .text(`Ref: #${quotation.id.slice(0, 8).toUpperCase()} | Data: ${new Date().toLocaleDateString('pt-BR')}`, 50, 135);
 
-    // Two Column Layout for Customer / Event Info
-    const topY = 160;
+      // --- CLIENTE & EVENTO ---
+      const topY = 170;
 
-    // Left Box - Customer
-    doc.rect(50, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
-    doc
-      .fillColor(primaryColor)
-      .fontSize(10)
-      .text('DADOS DO CLIENTE', 65, topY + 15);
-    doc
-      .fillColor(textDark)
-      .fontSize(12)
-      .text(quotation.customerName || 'Cliente Padrão', 65, topY + 35);
-    doc
-      .fillColor(textMuted)
-      .fontSize(10)
-      .text(`Tel: ${quotation.customerPhone || 'N/A'}`, 65, topY + 55);
+      // Box Cliente
+      doc.rect(50, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
+      doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text('DADOS DO CLIENTE', 65, topY + 15);
+      doc.fillColor(textDark).fontSize(12).text(quotation.customerName || 'Cliente (Não Especificado)', 65, topY + 35);
+      doc.fillColor(textMuted).fontSize(10).font('Helvetica').text(`Tel: ${quotation.customerPhone || 'N/A'}`, 65, topY + 55);
 
-    // Right Box - Event
-    doc.rect(315, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
-    doc
-      .fillColor(primaryColor)
-      .fontSize(10)
-      .text('DETALHES DO EVENTO', 330, topY + 15);
-    doc
-      .fillColor(textDark)
-      .fontSize(12)
-      .text(quotation.eventType, 330, topY + 35);
-    doc
-      .fillColor(textMuted)
-      .fontSize(10)
-      .text(`Convidados: ${quotation.guestCount} pax`, 330, topY + 55);
-    doc.text(
-      `Data do Evento: ${quotation.eventDate ? new Date(quotation.eventDate).toLocaleDateString('pt-BR') : 'A definir'}`,
-      330,
-      topY + 70,
-    );
+      // Box Evento
+      doc.rect(315, topY, 230, 90).fillAndStroke('#ffffff', lineLight);
+      doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text('DETALHES DO EVENTO', 330, topY + 15);
+      doc.fillColor(textDark).fontSize(12).text(quotation.eventType.toUpperCase(), 330, topY + 35);
+      doc.fillColor(textMuted).fontSize(10).font('Helvetica').text(`Convidados: ${quotation.guestCount} pax`, 330, topY + 55);
+      doc.text(`Data do Evento: ${quotation.eventDate ? new Date(quotation.eventDate).toLocaleDateString('pt-BR') : 'A definir'}`, 330, topY + 70);
 
-    // Items Table Area
-    const tableTop = 290;
+      // --- DETALHES (Tabela) ---
+      let currentY = 290;
+      doc.rect(50, currentY, 495, 30).fill(primaryColor);
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold');
+      doc.text('DESCRIÇÃO', 65, currentY + 10);
+      doc.text('TIPO', 300, currentY + 10);
+      doc.text('QTD', 380, currentY + 10, { width: 30, align: 'center' });
+      doc.text('SUBTOTAL', 430, currentY + 10, { align: 'right', width: 100 });
 
-    // Table Header
-    doc.rect(50, tableTop, 495, 30).fill(primaryColor);
-    doc.fillColor('#ffffff').fontSize(10);
-    doc.text('DESCRIÇÃO', 65, tableTop + 10);
-    doc.text('TIPO', 300, tableTop + 10);
-    doc.text('VALOR TOTAL', 430, tableTop + 10, { align: 'right', width: 100 });
+      currentY += 40;
+      doc.font('Helvetica');
 
-    // Table Content (Buffet Service)
-    const rowY = tableTop + 40;
-    doc.fillColor(textDark).fontSize(11);
-    doc.text('Serviço Completo de Catering', 65, rowY);
-    doc.fillColor(textMuted).fontSize(10);
-    doc.text(
-      `Menu premium para ${quotation.guestCount} convidados`,
-      65,
-      rowY + 15,
-    );
+      const items = quotation.complements || [];
 
-    doc.fillColor(textDark).fontSize(11);
-    doc.text(quotation.eventType, 300, rowY);
-    doc.text(
-      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      430,
-      rowY,
-      { align: 'right', width: 100 },
-    );
+      if (items.length > 0) {
+        items.forEach((item: any) => {
+          doc.fillColor(textDark).fontSize(11).text(item.name, 65, currentY, { width: 220 });
+          doc.fillColor(textMuted).fontSize(10).text(item.type || '-', 300, currentY);
+          doc.text(String(item.quantity || 1), 380, currentY, { width: 30, align: 'center' });
 
-    // Add extra row for styling line
-    doc
-      .strokeColor(lineLight)
-      .moveTo(50, rowY + 45)
-      .lineTo(545, rowY + 45)
-      .stroke();
+          const subtotalText = item.subtotal ? `Kz ${Number(item.subtotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-';
+          doc.fillColor(textDark).text(subtotalText, 430, currentY, { align: 'right', width: 100 });
 
-    // Totals Section
-    const totalY = rowY + 60;
-    doc.fillColor(textDark).fontSize(12).text('Subtotal:', 350, totalY);
-    doc.text(
-      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      430,
-      totalY,
-      { align: 'right', width: 100 },
-    );
+          currentY += 30;
+          doc.moveTo(50, currentY - 10).lineTo(545, currentY - 10).lineWidth(1).stroke(lineLight);
+        });
+      } else {
+        doc.fillColor(textMuted).fontSize(10).text('Sem complementos adicionais.', 65, currentY);
+        currentY += 30;
+        doc.moveTo(50, currentY - 10).lineTo(545, currentY - 10).lineWidth(1).stroke(lineLight);
+      }
 
-    doc
-      .fillColor(primaryColor)
-      .fontSize(14)
-      .text('TOTAL:', 350, totalY + 25);
-    doc.text(
-      `Kz ${quotation.estimatedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      430,
-      totalY + 25,
-      { align: 'right', width: 100 },
-    );
+      currentY += 10;
 
-    // Footer
-    const footerY = doc.page.height - 80;
-    doc.rect(0, footerY - 20, 595, 100).fill('#f8fafc');
-    doc
-      .fillColor(textMuted)
-      .fontSize(9)
-      .text('Obrigado por escolher a Puculuxa.', 50, footerY, {
-        align: 'center',
-      });
-    doc.text(
-      'Este orçamento tem validade de 15 dias a partir da data de emissão.',
-      50,
-      footerY + 15,
-      { align: 'center' },
-    );
-    doc
-      .fillColor(primaryColor)
-      .text('www.puculuxa.com | contacto@puculuxa.com', 50, footerY + 30, {
-        align: 'center',
-      });
+      // Obtém o preço base fixo ou da versão se existir
+      const latestVersion = quotation.versions?.[quotation.versions.length - 1];
+      const finalPrice = latestVersion?.price || quotation.estimatedTotal;
 
-    doc.end();
+      doc.fillColor(textDark).fontSize(12).font('Helvetica-Bold').text('Total Base Estimado:', 250, currentY);
+      doc.text(`Kz ${(quotation.estimatedTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 430, currentY, { align: 'right', width: 100 });
+
+      currentY += 25;
+
+      // DESTAQUE TOTAL FINAL
+      doc.rect(250, currentY - 5, 295, 40).fill('#fef2f2'); // Red 50 background
+      doc.fillColor(primaryColor).fontSize(16).font('Helvetica-Bold').text('VALOR TOTAL (Proposta):', 260, currentY + 5);
+      doc.text(`Kz ${Number(finalPrice || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 420, currentY + 5, { align: 'right', width: 115 });
+
+      // --- RODAPÉ ---
+      const footerY = doc.page.height - 120;
+
+      doc.lineWidth(1).moveTo(50, footerY - 20).lineTo(545, footerY - 20).stroke(lineLight);
+
+      doc.fillColor(textDark).fontSize(10).font('Helvetica-Bold').text('Condições da Proposta:', 50, footerY - 5);
+      doc.fillColor(textMuted).fontSize(9).font('Helvetica');
+      doc.text('• Validade da proposta: 7 dias a partir da presente data.', 50, footerY + 10);
+      doc.text('• O pagamento final carece de verificação via App/Comprovativo.', 50, footerY + 25);
+
+      doc.fillColor(primaryColor).fontSize(10).font('Helvetica-Bold').text('Obrigado por escolher a Puculuxa.', 50, footerY + 50, { align: 'center' });
+
+      // Assinatura digital textual algures na direita
+      doc.fillColor(accentColor).fontSize(12).font('Times-Italic').text('Assinatura Digital - Puculuxa Catering', 350, footerY + 30, { align: 'right' });
+      doc.fillColor(textMuted).fontSize(8).font('Helvetica').text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 350, footerY + 45, { align: 'right' });
+
+      doc.end();
+    } catch (error) {
+      console.error('[PdfService] Erro a gerar PDF:', error);
+      res.status(500).send('Erro interno ao gerar o documento PDF da proposta.');
+    }
   }
 }

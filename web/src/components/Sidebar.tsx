@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChefHat, MessageSquare, PieChart, LayoutDashboard, ClipboardList, Store, Users, Settings, LogOut, FileText } from 'lucide-react';
+import { ChefHat, MessageSquare, PieChart, LayoutDashboard, ClipboardList, Store, Users, Settings, LogOut, FileText, Banknote } from 'lucide-react';
 import { AuthWebService } from '@/services/authService';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -17,6 +17,7 @@ export const Sidebar = () => {
         { icon: Store, label: 'Catálogo', href: '/dashboard/catalog' },
         { icon: Users, label: 'Clientes', href: '/dashboard/customers' },
         { icon: PieChart, label: 'Relatórios', href: '/dashboard/stats' },
+        { icon: Banknote, label: 'Financeiro', href: '/dashboard/finance' },
         { icon: MessageSquare, label: 'Avaliações', href: '/dashboard/reviews' },
         { icon: Settings, label: 'Configurações', href: '/dashboard/settings' },
     ];

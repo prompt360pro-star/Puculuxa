@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ForbiddenException, BadRequestException } from '@nestjs/common';
 import * as https from 'https';
 import { calculateQuotation } from '@puculuxa/shared';
 import { PdfService } from '../common/pdf.service';
@@ -151,7 +151,23 @@ export class QuotationService {
   }
 
   // ─── UPDATE STATUS (com guard + auditoria) ───
-  async updateStatus(id: string, status: string, changedBy: string, reason?: string) {
+  async updateStatus(id: string, status: string, changedBy: string, reason?: string, role?: string) {
+    if (role === 'CUSTOMER') {
+      const quotation = await this.findOne(id);
+
+      if (quotation.customerId !== changedBy) {
+        throw new ForbiddenException('Não tem permissão para alterar este orçamento');
+      }
+
+      if (status !== 'ACCEPTED') {
+        throw new ForbiddenException('Cliente só pode aceitar (ACCEPTED) uma proposta');
+      }
+
+      if (quotation.status !== 'PROPOSAL_SENT') {
+        throw new BadRequestException('Proposta não está disponível para aceitação neste momento');
+      }
+    }
+
     const updatedQuotation = await this.statusGuard.transition(
       id,
       status as QuotationStatus,

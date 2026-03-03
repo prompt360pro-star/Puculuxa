@@ -6,35 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-}
-
-// ─────────────────────────────────────────────
-// FINANCIAL ENUMS (FASE 9A)
-// ─────────────────────────────────────────────
-enum PaymentMethod {
-  APPYPAY_GPO
-  APPYPAY_REF
-  BANK_TRANSFER
-  GOVERNMENT_CREDIT
-  CASH
-}
-
-enum PaymentStatus {
-  PENDING
-  AWAITING_PROOF
-  SUCCESS
-  FAILED
-  EXPIRED
-  CANCELLED
-}
-
-enum FinancialStatus {
-  UNPAID
-  PARTIALLY_PAID
-  PAID
-  IN_CREDIT
-  OVERDUE
+  provider = "sqlite"
 }
 
 // ─────────────────────────────────────────────
@@ -258,40 +230,24 @@ model User {
 }
 
 // ─────────────────────────────────────────────
-// ORDER (FASE 9A — camada financeira)
+// ORDER (sem alterações)
 // ─────────────────────────────────────────────
 model Order {
-  id              String           @id @default(cuid())
-  userId          String
-  user            User             @relation(fields: [userId], references: [id])
-  items           OrderItem[]
-  total           Float
-  status          String           @default("PENDING")
-  financialStatus FinancialStatus  @default(UNPAID)
-  paymentMode     PaymentMethod?
-  feedback        Feedback?
-  payments        Payment[]
-  invoices        Invoice[]
-  deletedAt       DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  // ─── Campos de Crédito Institucional (FASE 9D) ───
-  creditDueDate           DateTime?                  // prazo acordado para pagamento
-  creditApprovedAt        DateTime?
-  creditApprovedById      String?                    // admin userId que aprovou
-  creditNotes             String?                    // observações livres
-  debtorEntityName        String?                    // ex: Ministério da Educação
-  debtorEntityNif         String?                    // NIF da entidade
-  debtorProcessRef        String?                    // ex: Proc. nº 2026/MINEA/0042
-  lastPaymentFollowUpAt   DateTime?                  // data do último follow-up
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  items     OrderItem[]
+  total     Float
+  status    String      @default("PENDING")
+  feedback  Feedback?
+  payments  Payment[]
+  deletedAt DateTime?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@index([status])
   @@index([userId])
   @@index([createdAt])
-  @@index([financialStatus])
-  @@index([creditDueDate])
-  @@index([paymentMode])
 }
 
 model OrderItem {
@@ -354,62 +310,18 @@ model Review {
   @@index([userId])
 }
 
-// ─────────────────────────────────────────────
-// PAYMENT (FASE 9A — expandido)
-// ─────────────────────────────────────────────
 model Payment {
-  id              String        @id @default(cuid())
-  orderId         String
-  order           Order         @relation(fields: [orderId], references: [id])
-  amount          Float
-  method          PaymentMethod
-  status          PaymentStatus @default(PENDING)
-  providerRef     String?                    // ref do gateway (AppyPay)
-  merchantRef     String?                    // ref interna Puculuxa
-  idempotencyKey  String?       @unique      // previne duplicação de webhook
-  proofUrl        String?                    // comprovativo de transferência
-  metadata        Json?                      // dados extra do gateway
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  amount        Float
+  method        String   // MULTICAIXA, TRANSFER, CASH
+  status        String   @default("PENDING")
+  receiptUrl    String?
+  transactionId String?
+  createdAt     DateTime @default(now())
 
   @@index([orderId])
-  @@index([status])
-}
-
-// ─────────────────────────────────────────────
-// INVOICE (FASE 9C-1 — numeração configurável AGT)
-// ─────────────────────────────────────────────
-model Invoice {
-  id              String   @id @default(cuid())
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id])
-  invoiceNumber   String   @unique
-  prefix          String?                    // ex: PF, FT, NE
-  year            Int?                       // ex: 2025
-  sequenceNumber  Int?                       // ex: 347
-  totalAmount     Float
-  issuedAt        DateTime @default(now())
-  dueDate         DateTime?
-  isGovernment    Boolean  @default(false)
-  createdAt       DateTime @default(now())
-
-  @@index([orderId])
-}
-
-// ─────────────────────────────────────────────
-// INVOICE CONFIG (FASE 9C-1 — config de série/numeração)
-// ─────────────────────────────────────────────
-model InvoiceConfig {
-  id         String   @id @default(cuid())
-  prefix     String   @default("PF")           // PF=Pró-forma, FT=Fatura, NE=Nota Encomenda
-  year       Int
-  nextNumber Int      @default(1)
-  padding    Int      @default(5)              // 00001
-  format     String   @default("{prefix} {year}/{number}")
-  updatedAt  DateTime @updatedAt
-  createdAt  DateTime @default(now())
-
-  @@unique([prefix, year])
 }
 
 model LoyaltyPoints {
@@ -423,3 +335,4 @@ model LoyaltyPoints {
 
   @@index([userId])
 }
+

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensi
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ChevronLeft, CheckCircle, Package, Truck, Home, CreditCard } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiService } from '../services/api';
 import { Theme, T } from '../theme';
 import { formatKz, formatDateAO } from '../utils/errorMessages';
@@ -51,6 +51,31 @@ export const OrderTrackingScreen = () => {
 
     // Animação para a badge "Aguarda Confirmação"
     const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    const queryClient = useQueryClient();
+
+    const acceptMutation = useMutation({
+        mutationFn: () => ApiService.updateQuotationStatus(quotationId, 'ACCEPTED'),
+        onSuccess: () => {
+            // Refetch the active quotations and close screens or provide feedback
+            queryClient.invalidateQueries(['myQuotations']);
+            alert('Sucesso: Proposta aceite com sucesso!');
+        },
+        onError: (err) => {
+            alert('Erro: Não foi possível aceitar a proposta. ' + err.message);
+        }
+    });
+
+    const handleAccept = () => {
+        Alert.alert(
+            'Confirmar Aceitação',
+            'Tem a certeza que deseja aceitar a proposta? A equipa Puculuxa irá avançar com a sua encomenda.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Sim, Aceito', style: 'default', onPress: () => acceptMutation.mutate() },
+            ]
+        );
+    };
 
     useEffect(() => {
         if (isQuotation && quotation?.status === 'ACCEPTED') {
@@ -120,11 +145,24 @@ export const OrderTrackingScreen = () => {
                     </View>
 
                     {quotation.status === 'PROPOSAL_SENT' && (
-                        <View style={{ marginBottom: 24 }}>
+                        <View style={{ marginBottom: 24, gap: 12 }}>
                             <PremiumButton
-                                title="Ver Proposta"
+                                title={acceptMutation.isPending ? "A processar..." : "✅ Aceitar Proposta"}
                                 size="md"
+                                disabled={acceptMutation.isPending}
+                                onPress={handleAccept}
                                 style={{ backgroundColor: '#10B981', borderColor: '#059669' }}
+                            />
+                            <PremiumButton
+                                title="⬇️ Descarregar Proposta (PDF)"
+                                size="md"
+                                onPress={() => {
+                                    const { Linking } = require('react-native');
+                                    const { API_CONFIG } = require('../config/api.config');
+                                    // Utiliza a route directa do backend para entregar o ficheiro de download no browser do device
+                                    Linking.openURL(`${API_CONFIG.BASE_URL}/quotations/${quotationId}/pdf`);
+                                }}
+                                style={{ backgroundColor: '#1F2937', borderColor: '#374151' }}
                             />
                         </View>
                     )}

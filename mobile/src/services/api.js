@@ -168,6 +168,20 @@ export const ApiService = {
         }
     },
 
+    async updateQuotationStatus(id, status) {
+        try {
+            const response = await fetchWithAuth(`${BASE_URL}/quotations/${id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status }),
+            });
+            if (!response.ok) throw new Error('Falha ao mudar estado da proposta');
+            return await response.json();
+        } catch (error) {
+            console.error('Update Status Error:', error);
+            throw error;
+        }
+    },
+
     async uploadQuotationImage(uri) {
         try {
             const formData = new FormData();

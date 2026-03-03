@@ -13,6 +13,7 @@ import {
   ValidationPipe,
   UseInterceptors,
   UploadedFile,
+  ForbiddenException,
 } from '@nestjs/common';
 import { QuotationService } from './quotation.service';
 import { QuotationIntelligenceService } from './quotation-intelligence.service';
@@ -106,7 +107,7 @@ export class QuotationController {
 
   // ─── Actualizar Status (com guard + auditoria) ───
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'CUSTOMER')
   @Patch(':id/status')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   updateStatus(
@@ -114,8 +115,9 @@ export class QuotationController {
     @Body() dto: UpdateQuotationStatusDto,
     @Req() req: Request,
   ) {
-    const adminId = (req as any).user?.id || 'ADMIN';
-    return this.quotationService.updateStatus(id, dto.status, adminId, dto.reason);
+    const userId = (req as any).user?.id || 'ANONYMOUS';
+    const userRole = (req as any).user?.role;
+    return this.quotationService.updateStatus(id, dto.status, userId, dto.reason, userRole);
   }
 
   // ─── Enviar Proposta (Admin cria versão + transição) ───
@@ -142,9 +144,18 @@ export class QuotationController {
   }
 
   // ─── PDF ───
+  @UseGuards(JwtAuthGuard)
   @Get(':id/pdf')
-  async getPdf(@Param('id') id: string, @Res() res: Response) {
+  async getPdf(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
     const quotation = await this.quotationService.findOne(id);
+
+    const userRole = (req as any).user?.role;
+    const userId = (req as any).user?.id || (req as any).user?.sub;
+
+    if (userRole !== 'ADMIN' && quotation.customerId !== userId) {
+      throw new ForbiddenException('Não tem permissão para aceder a este documento.');
+    }
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',

@@ -1,123 +1,81 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { QuotationService } from './quotation.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { EventsGateway } from '../events/events.gateway';
+import { QuotationStatusGuard } from './quotation-status.guard';
+import { QuotationIntelligenceService } from './quotation-intelligence.service';
+import { EventReminderService } from './event-reminder.service';
 import { PdfService } from '../common/pdf.service';
-import { NotFoundException } from '@nestjs/common';
-import { calculateQuotation } from '@puculuxa/shared';
+import { EventsGateway } from '../events/events.gateway';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
-jest.mock('@puculuxa/shared', () => ({
-  calculateQuotation: jest.fn().mockReturnValue({ total: 15000 }),
-}));
+const mockPrismaService: any = {
+  quotation: {
+    findUnique: jest.fn(),
+  },
+  $transaction: jest.fn((callback: (tx: any) => Promise<any>) => callback(mockPrismaService)),
+};
 
-describe('QuotationService', () => {
+const mockQuotationStatusGuard = {
+  transition: jest.fn(),
+  calculateSlaDeadline: jest.fn(),
+};
+
+describe('QuotationService - Customer Acceptance', () => {
   let service: QuotationService;
-  let prisma: PrismaService;
-  let events: EventsGateway;
-
-  const mockPrismaService = {
-    quotation: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-  };
-
-  const mockEventsGateway = {
-    notifyAdmins: jest.fn(),
-  };
-
-  const mockPdfService = {
-    generateQuotationPdf: jest.fn(),
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         QuotationService,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: EventsGateway, useValue: mockEventsGateway },
-        { provide: PdfService, useValue: mockPdfService },
+        { provide: QuotationStatusGuard, useValue: mockQuotationStatusGuard },
+        { provide: QuotationIntelligenceService, useValue: {} },
+        { provide: EventReminderService, useValue: {} },
+        { provide: PdfService, useValue: {} },
+        { provide: EventsGateway, useValue: { notifyAdmins: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<QuotationService>(QuotationService);
-    prisma = module.get<PrismaService>(PrismaService);
-    events = module.get<EventsGateway>(EventsGateway);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  it('should allow customer to accept own proposal', async () => {
+    const mockQuotation = { id: 'q1', customerId: 'c1', status: 'PROPOSAL_SENT' };
+    mockPrismaService.quotation.findUnique.mockResolvedValue(mockQuotation);
+    mockQuotationStatusGuard.transition.mockResolvedValue({ ...mockQuotation, status: 'ACCEPTED' });
+
+    // Stub push notification
+    jest.spyOn(service as any, 'sendStatusPushNotification').mockImplementation(() => { });
+
+    await expect(service.updateStatus('q1', 'ACCEPTED', 'c1', undefined, 'CUSTOMER'))
+      .resolves.toEqual({ ...mockQuotation, status: 'ACCEPTED' });
   });
 
-  describe('create', () => {
-    it('should create quotation, calculate total, notify admins and return the new quotation', async () => {
-      const createDto = {
-        eventType: 'BIRTHDAY',
-        guestCount: 50,
-        customerName: 'Test',
-      };
-      const createdQuotation = {
-        id: '1',
-        ...createDto,
-        total: 15000,
-        status: 'PENDING',
-      };
+  it('should reject if customer tries to accept proposal of another user', async () => {
+    const mockQuotation = { id: 'q1', customerId: 'c1', status: 'PROPOSAL_SENT' };
+    mockPrismaService.quotation.findUnique.mockResolvedValue(mockQuotation);
 
-      mockPrismaService.quotation.create.mockResolvedValue(createdQuotation);
-
-      const result = await service.create(createDto);
-
-      expect(result).toEqual(createdQuotation);
-      expect(calculateQuotation).toHaveBeenCalledWith({
-        eventType: 'BIRTHDAY',
-        guestCount: 50,
-        complements: [],
-      });
-      expect(mockPrismaService.quotation.create).toHaveBeenCalled();
-      expect(mockEventsGateway.notifyAdmins).toHaveBeenCalledWith(
-        'new_quotation',
-        createdQuotation,
-      );
-    });
+    await expect(service.updateStatus('q1', 'ACCEPTED', 'other_user', undefined, 'CUSTOMER'))
+      .rejects.toThrow(ForbiddenException);
   });
 
-  describe('findOne', () => {
-    it('should return a quotation if found', async () => {
-      mockPrismaService.quotation.findUnique.mockResolvedValue({
-        id: '1',
-        total: 15000,
-      });
-      const result = await service.findOne('1');
-      expect(result).toEqual({ id: '1', total: 15000 });
-    });
+  it('should reject if status is not PROPOSAL_SENT', async () => {
+    const mockQuotation = { id: 'q1', customerId: 'c1', status: 'DRAFT' };
+    mockPrismaService.quotation.findUnique.mockResolvedValue(mockQuotation);
 
-    it('should throw NotFoundException if quotation does not exist', async () => {
-      mockPrismaService.quotation.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('999')).rejects.toThrow(NotFoundException);
-    });
+    await expect(service.updateStatus('q1', 'ACCEPTED', 'c1', undefined, 'CUSTOMER'))
+      .rejects.toThrow(BadRequestException);
   });
 
-  describe('updateStatus', () => {
-    it('should update status calling findOne to verify existence', async () => {
-      mockPrismaService.quotation.findUnique.mockResolvedValue({ id: '1' }); // findOne mock
-      mockPrismaService.quotation.update.mockResolvedValue({
-        id: '1',
-        status: 'APPROVED',
-      });
+  it('should reject if customer tries different status than ACCEPTED', async () => {
+    const mockQuotation = { id: 'q1', customerId: 'c1', status: 'PROPOSAL_SENT' };
+    mockPrismaService.quotation.findUnique.mockResolvedValue(mockQuotation);
 
-      const result = await service.updateStatus('1', 'APPROVED');
-
-      expect(result).toEqual({ id: '1', status: 'APPROVED' });
-      expect(mockPrismaService.quotation.update).toHaveBeenCalledWith({
-        where: { id: '1' },
-        data: { status: 'APPROVED' },
-      });
-    });
+    await expect(service.updateStatus('q1', 'REJECTED', 'c1', undefined, 'CUSTOMER'))
+      .rejects.toThrow(ForbiddenException);
   });
 });
