@@ -277,5 +277,69 @@ export const ApiService = {
         const response = await fetch(`${BASE_URL}/quotations/blocked-dates`);
         if (!response.ok) throw new Error('Falha ao buscar datas bloqueadas');
         return await response.json();
-    }
+    },
+
+    // ─── Payment Flow (FASE 10A) ───
+
+    async getOrderById(orderId) {
+        const response = await fetchWithAuth(`${BASE_URL}/orders/${orderId}`);
+        if (!response.ok) throw new Error('Falha ao buscar detalhes do pedido');
+        return await response.json();
+    },
+
+    async initiateGpoPayment(orderId, phoneNumber) {
+        const response = await fetchWithAuth(`${BASE_URL}/payments/initiate-gpo`, {
+            method: 'POST',
+            body: JSON.stringify({ orderId, phoneNumber }),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao iniciar pagamento Multicaixa');
+        }
+        return await response.json();
+    },
+
+    async createBankTransfer(orderId) {
+        const response = await fetchWithAuth(`${BASE_URL}/payments/bank-transfer`, {
+            method: 'POST',
+            body: JSON.stringify({ orderId }),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao gerar dados de transferência bancária');
+        }
+        return await response.json();
+    },
+
+    async uploadPaymentProof(paymentId, fileUri, fileName, mimeType) {
+        const formData = new FormData();
+        formData.append('file', {
+            uri: fileUri,
+            name: fileName || 'comprovativo.pdf',
+            type: mimeType || 'application/pdf',
+        });
+
+        // Use core getHeaders directly so we can let fetch boundary build correctly without overriding Content-Type
+        const token = await AsyncStorage.getItem('puculuxa_token');
+        const response = await fetch(`${BASE_URL}/payments/${paymentId}/upload-proof`, {
+            method: 'POST',
+            headers: {
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                // Note: fetch will auto-set Content-Type multipart/form-data boundary
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || 'Falha ao enviar comprovativo');
+        }
+        return await response.json();
+    },
+
+    async getPaymentsByOrder(orderId) {
+        const response = await fetchWithAuth(`${BASE_URL}/payments/order/${orderId}`);
+        if (!response.ok) throw new Error('Falha ao buscar histórico de pagamentos');
+        return await response.json();
+    },
 };

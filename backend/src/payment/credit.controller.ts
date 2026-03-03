@@ -10,6 +10,7 @@ import {
     Req,
     Logger,
     HttpCode,
+    Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
@@ -99,8 +100,13 @@ export class CreditController {
 
     // ─── c) GET /credits/overdue ───
     @Get('overdue')
-    async getOverdue() {
-        return this.creditService.getOverdueOrders();
+    async getOverdue(
+        @Query('page') page: string = '1',
+        @Query('limit') limit: string = '20'
+    ) {
+        const pageNumber = Math.max(1, parseInt(page, 10));
+        const limitNumber = Math.max(1, parseInt(limit, 10));
+        return this.creditService.getOverdueOrders(pageNumber, limitNumber);
     }
 
     // ─── d) POST /credits/refresh-overdue ───

@@ -2,6 +2,7 @@ import {
     Controller,
     Post,
     Get,
+    Query,
     Body,
     Param,
     Req,
@@ -100,7 +101,7 @@ export class PaymentController {
             throw new BadRequestException('Este pedido já está pago');
         }
 
-        // Criar pagamento com método BANK_TRANSFER e status AWAITING_PROOF
+        // Criar pagamento com método BANK_TRANSFER e status AWAITING_PROOF (idempotente)
         const payment = await this.paymentService.createBankTransferPayment(dto.orderId, order.total);
 
         // Atualizar paymentMode na order
@@ -153,7 +154,7 @@ export class PaymentController {
 
         await this.prisma.payment.update({
             where: { id: paymentId },
-            data: { proofUrl },
+            data: { proofUrl, status: 'AWAITING_PROOF' as any },
         });
 
         // Notificar admin via WebSocket
@@ -212,5 +213,69 @@ export class PaymentController {
     @Get('bank-details')
     getBankDetails() {
         return PUCULUXA_BANK_DETAILS;
+    }
+
+    // ─── g) ADMIN: Pagamentos aguardando comprovativo (Paginado) ───
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('ADMIN')
+    @Get('admin/awaiting-proof')
+    async getAwaitingProof(
+        @Query('page') page: string = '1',
+        @Query('limit') limit: string = '20'
+    ) {
+        const pageNumber = Math.max(1, parseInt(page, 10));
+        const limitNumber = Math.max(1, parseInt(limit, 10));
+        const skip = (pageNumber - 1) * limitNumber;
+
+        const [total, payments] = await Promise.all([
+            this.prisma.payment.count({
+                where: { status: 'AWAITING_PROOF' as any },
+            }),
+            this.prisma.payment.findMany({
+                where: { status: 'AWAITING_PROOF' as any },
+                include: {
+                    order: {
+                        select: {
+                            id: true,
+                            total: true,
+                            createdAt: true,
+                            userId: true,
+                            user: { select: { name: true } },
+                            invoices: {
+                                take: 1,
+                                orderBy: { createdAt: 'desc' },
+                                select: { invoiceNumber: true }
+                            }
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limitNumber,
+            })
+        ]);
+
+        const data = payments.map((p: any) => ({
+            id: p.id,
+            orderId: p.orderId,
+            amount: p.amount,
+            method: p.method,
+            status: p.status,
+            proofUrl: p.proofUrl,
+            merchantRef: p.merchantRef,
+            createdAt: p.createdAt,
+            customerName: p.order?.user?.name || null,
+            invoiceNumber: p.order?.invoices?.[0]?.invoiceNumber || null,
+        }));
+
+        return {
+            data,
+            meta: {
+                total,
+                page: pageNumber,
+                limit: limitNumber,
+                lastPage: Math.max(1, Math.ceil(total / limitNumber))
+            }
+        };
     }
 }

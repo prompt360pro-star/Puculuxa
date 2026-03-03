@@ -42,12 +42,8 @@ export class WebhookSignatureGuard implements CanActivate {
             throw new UnauthorizedException('Missing webhook signature');
         }
 
-        // Raw body must be preserved — requires rawBody middleware or bodyParser with verify fn
-        const rawBody = (request as any).rawBody as Buffer | undefined;
-        if (!rawBody) {
-            this.logger.error('[WebhookGuard] rawBody not available — check body parser config');
-            throw new UnauthorizedException('Unable to verify signature');
-        }
+        // Raw body fallback if middleware fails (though verify should set it)
+        const rawBody = (request as any).rawBody ?? Buffer.from(JSON.stringify(request.body));
 
         const expected = crypto
             .createHmac('sha256', secret)

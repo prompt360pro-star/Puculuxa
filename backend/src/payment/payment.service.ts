@@ -188,6 +188,21 @@ export class PaymentService {
 
     // ─── g) createBankTransferPayment ───
     async createBankTransferPayment(orderId: string, amount: number) {
+        // Idempotency check: see if there is already an open BANK_TRANSFER for this order
+        const existing = await this.prisma.payment.findFirst({
+            where: {
+                orderId,
+                method: 'BANK_TRANSFER' as any,
+                status: 'AWAITING_PROOF' as any
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        if (existing) {
+            this.logger.log(`[Payment] Bank transfer payment ${existing.id} already exists for order ${orderId}`);
+            return existing;
+        }
+
         const ts = Date.now();
         const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
         const merchantRef = `PUC-BT-${ts}-${rand}`;

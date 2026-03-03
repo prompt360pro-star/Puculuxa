@@ -37,6 +37,21 @@ enum FinancialStatus {
   OVERDUE
 }
 
+enum ReminderChannel {
+  PUSH
+  EMAIL
+  WHATSAPP
+  INTERNAL
+}
+
+enum PaymentReminderType {
+  PAYMENT_PENDING_GPO
+  PAYMENT_AWAITING_PROOF
+  PAYMENT_AWAITING_VALIDATION
+  CREDIT_DUE_SOON
+  CREDIT_OVERDUE
+}
+
 // ─────────────────────────────────────────────
 // PRODUCT
 // ─────────────────────────────────────────────
@@ -364,8 +379,8 @@ model Payment {
   amount          Float
   method          PaymentMethod
   status          PaymentStatus @default(PENDING)
-  providerRef     String?                    // ref do gateway (AppyPay)
-  merchantRef     String?                    // ref interna Puculuxa
+  providerRef     String?       @unique               // ref do gateway (AppyPay)
+  merchantRef     String?       @unique               // ref interna Puculuxa
   idempotencyKey  String?       @unique      // previne duplicação de webhook
   proofUrl        String?                    // comprovativo de transferência
   metadata        Json?                      // dados extra do gateway
@@ -374,6 +389,26 @@ model Payment {
 
   @@index([orderId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT REMINDER LOG (FASE 10D)
+// ─────────────────────────────────────────────
+model PaymentReminderLog {
+  id          String              @id @default(cuid())
+  type        PaymentReminderType
+  channel     ReminderChannel     @default(PUSH)
+  orderId     String?
+  paymentId   String?
+  userId      String?            // customer userId se aplicável
+  target      String?            // ex: phone/email se necessário
+  sentAt      DateTime            @default(now())
+  meta        Json?
+  
+  @@index([type])
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────

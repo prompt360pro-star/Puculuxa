@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
+import * as bodyParser from 'body-parser';
 
 import helmet from 'helmet';
 import { initSentry } from './common/sentry.config';
@@ -14,6 +15,11 @@ async function bootstrap() {
 
   if (process.env.NODE_ENV === 'production') {
     app.useLogger(['error', 'warn', 'log']);
+
+    if (!process.env.APPYPAY_WEBHOOK_SECRET) {
+      console.error('FATAL LOG: APPYPAY_WEBHOOK_SECRET is required in production environments to secure webhooks.');
+      process.exit(1);
+    }
   }
 
   app.use(helmet());
@@ -31,6 +37,13 @@ async function bootstrap() {
 
   // Global prefix for all routes
   app.setGlobalPrefix('api');
+
+  // Capture raw body for webhook signature verification
+  app.use(bodyParser.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
 
   // Transformation and validation
   app.useGlobalPipes(

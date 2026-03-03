@@ -129,23 +129,40 @@ export class CreditService {
         return result.count;
     }
 
-    // ─── d) Get overdue orders (for admin list) ───
-    async getOverdueOrders() {
-        return this.prisma.order.findMany({
-            where: { financialStatus: 'OVERDUE' },
-            orderBy: { creditDueDate: 'asc' },
-            select: {
-                id: true,
-                debtorEntityName: true,
-                debtorEntityNif: true,
-                debtorProcessRef: true,
-                creditDueDate: true,
-                creditNotes: true,
-                total: true,
-                financialStatus: true,
-                createdAt: true,
-                invoices: { select: { invoiceNumber: true } },
+    // ─── d) Get overdue orders (for admin list, paginated) ───
+    async getOverdueOrders(page: number = 1, limit: number = 20) {
+        const skip = (page - 1) * limit;
+
+        const [total, data] = await Promise.all([
+            this.prisma.order.count({ where: { financialStatus: 'OVERDUE' } }),
+            this.prisma.order.findMany({
+                where: { financialStatus: 'OVERDUE' },
+                orderBy: { creditDueDate: 'asc' },
+                skip,
+                take: limit,
+                select: {
+                    id: true,
+                    debtorEntityName: true,
+                    debtorEntityNif: true,
+                    debtorProcessRef: true,
+                    creditDueDate: true,
+                    creditNotes: true,
+                    total: true,
+                    financialStatus: true,
+                    createdAt: true,
+                    invoices: { select: { invoiceNumber: true } },
+                },
+            }),
+        ]);
+
+        return {
+            data,
+            meta: {
+                total,
+                page,
+                limit,
+                lastPage: Math.max(1, Math.ceil(total / limit)),
             },
-        });
+        };
     }
 }

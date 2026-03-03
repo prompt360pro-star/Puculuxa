@@ -7,13 +7,15 @@ import { PaymentController } from './payment.controller';
 import { WebhookController } from './webhook.controller';
 import { InvoiceConfigController } from './invoice-config.controller';
 import { CreditController } from './credit.controller';
+import { PaymentReminderController } from './payment-reminder.controller';
+import { PaymentReminderService } from './payment-reminder.service';
 import { DatabaseModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 
 @Module({
     imports: [DatabaseModule, EventsModule],
-    controllers: [PaymentController, WebhookController, InvoiceConfigController, CreditController],
-    providers: [AppyPayProvider, PaymentService, InvoiceService, CreditService],
-    exports: [PaymentService, InvoiceService, CreditService],
+    controllers: [PaymentController, WebhookController, InvoiceConfigController, CreditController, PaymentReminderController],
+    providers: [AppyPayProvider, PaymentService, InvoiceService, CreditService, PaymentReminderService],
+    exports: [PaymentService, InvoiceService, CreditService, PaymentReminderService],
 })
 export class PaymentModule { }

@@ -4,17 +4,13 @@ import {
     Body,
     HttpCode,
     Logger,
+    Req,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PaymentService } from './payment.service';
-// import { WebhookSignatureGuard } from './guards/webhook.guard';
-// TODO: Activar quando tivermos APPYPAY_WEBHOOK_SECRET confirmado:
-// @UseGuards(WebhookSignatureGuard)
+import * as crypto from 'crypto';
+import * as Sentry from '@sentry/node';
 
-/**
- * AppyPay Webhook Payload (estrutura esperada)
- * Verificar documentação: appypay.stoplight.io
- */
 interface AppyPayWebhookPayload {
     id: string;             // Charge ID do AppyPay (= nosso providerRef)
     status: string;         // 'COMPLETED' | 'PAID' | 'SUCCESS' | 'FAILED' | 'DECLINED' | 'EXPIRED'
@@ -44,32 +40,75 @@ export class WebhookController {
      */
     @Post('appypay')
     @HttpCode(200)
-    async handleAppyPayWebhook(@Body() body: AppyPayWebhookPayload) {
+    async handleAppyPayWebhook(@Req() req: any, @Body() body: AppyPayWebhookPayload) {
+
+        // --- 1. Signature Validation (Always-200 Approach) ---
+        const secret = process.env.APPYPAY_WEBHOOK_SECRET;
+        const signature = req.headers['x-appypay-signature'];
+
+        if (!secret) {
+            // Se estivermos aqui em PROD, devia ter caído no main.ts, mas por prevenção:
+            if (process.env.NODE_ENV === 'production') {
+                this.logger.error('[Webhook] FATAL: APPYPAY_WEBHOOK_SECRET is missing. Webhooks are running completely insecure.');
+            } else {
+                this.logger.warn('[Webhook] APPYPAY_WEBHOOK_SECRET not set — skipping signature check');
+            }
+        } else {
+            if (!signature) {
+                this.logger.warn('[Webhook] Missing x-appypay-signature header - payload ignored');
+                return { received: true, ignored: true };
+            }
+
+            const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
+            const expected = crypto
+                .createHmac('sha256', secret)
+                .update(rawBody)
+                .digest('hex');
+
+            const sigStr = String(signature).replace(/^sha256=/, '').trim();
+            const sigBuf = Buffer.from(sigStr, 'utf8');
+            const expBuf = Buffer.from(expected, 'utf8');
+
+            if (sigBuf.length !== expBuf.length) {
+                this.logger.warn('[Webhook] Invalid signature length - payload ignored');
+                Sentry.captureMessage('[Webhook] Invalid signature length', 'warning');
+                return { received: true, ignored: true };
+            }
+
+            const isValid = crypto.timingSafeEqual(sigBuf, expBuf);
+
+            if (!isValid) {
+                this.logger.warn('[Webhook] Invalid signature - payload ignored', { signature: sigStr });
+                Sentry.captureMessage('[Webhook] Invalid signature', 'warning');
+                return { received: true, ignored: true };
+            }
+        }
+
         const { id, status, merchantTransactionId } = body;
 
         this.logger.log(`[Webhook] AppyPay received — chargeId: ${id}, status: ${status}, merchantTxId: ${merchantTransactionId}`);
 
         try {
-            // 1. Find payment by providerRef (charge id) or merchantRef
+            // 2. Find payment by providerRef (charge id) or merchantRef
             const payment = await this.paymentService.findByProviderRefOrMerchantRef(id, merchantTransactionId);
 
             if (!payment) {
                 this.logger.warn(`[Webhook] Payment not found for chargeId=${id} / merchantTxId=${merchantTransactionId} — ignoring`);
-                return { received: true };
+                return { received: true, ignored: true };
             }
 
-            // 2. Idempotency check — skip if already in a terminal state
+            // 3. Idempotency check — skip if already in a terminal state
             if (payment.status === 'SUCCESS') {
                 this.logger.log(`[Webhook] Payment ${payment.id} already confirmed — idempotent skip`);
-                return { received: true };
+                return { received: true, ignored: true };
             }
 
             if (payment.status === 'FAILED') {
                 this.logger.log(`[Webhook] Payment ${payment.id} already failed — idempotent skip`);
-                return { received: true };
+                return { received: true, ignored: true };
             }
 
-            // 3. Process based on status
+            // 4. Process based on status
             if (SUCCESS_STATUSES.has(status?.toUpperCase())) {
                 await this.paymentService.confirmPayment(payment.id, id);
                 this.logger.log(`[Webhook] ✅ Payment ${payment.id} confirmed for order ${payment.orderId}`);
