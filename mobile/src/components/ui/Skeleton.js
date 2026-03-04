@@ -34,7 +34,7 @@ export const Skeleton = ({ width = '100%', height = 16, borderRadius = 8, style 
         <View style={[styles.base, { width, height, borderRadius }, style]}>
             <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}>
                 <LinearGradient
-                    colors={['#F5EFE0', '#EDE5D0', '#F5EFE0']}
+                    colors={['#18181B', '#242428', '#18181B']}
                     start={{ x: 0, y: 0.5 }}
                     end={{ x: 1, y: 0.5 }}
                     style={[StyleSheet.absoluteFill, { width: 600 }]}
@@ -60,14 +60,16 @@ export const ProductCardSkeleton = () => (
 
 const styles = StyleSheet.create({
     base: {
-        backgroundColor: '#F5EFE0',
+        backgroundColor: '#18181B',
         overflow: 'hidden',
     },
     cardSkeleton: {
         flex: 1,
         margin: 6,
         borderRadius: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#131316',
+        borderColor: '#242428',
+        borderWidth: 1,
         overflow: 'hidden',
     },
 });

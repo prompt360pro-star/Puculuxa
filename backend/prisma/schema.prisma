@@ -659,3 +659,25 @@ model WhatsAppLog {
   @@index([createdAt])
   @@map("whatsapp_logs")
 }
+
+// ─────────────────────────────────────────────
+// PAYMENT TERMS CONFIG (FASE 11C)
+// ─────────────────────────────────────────────
+model PaymentTermsConfig {
+  id               String       @id @default(cuid())
+  segment          ClientSegment
+  eventType        String?
+  depositPercent   Int          @default(50)
+  depositDueDays   Int          @default(1)
+  balanceDueDays   Int          @default(3)
+  creditDueDays    Int          @default(60)
+  allowGpo         Boolean      @default(true)
+  allowBankTransfer Boolean     @default(true)
+  allowCredit      Boolean      @default(false)
+  updatedAt        DateTime     @updatedAt
+  createdAt        DateTime     @default(now())
+
+  @@index([segment])
+  @@index([eventType])
+  @@unique([segment, eventType])
+}

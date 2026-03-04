@@ -34,12 +34,19 @@ export class PaymentReminderService {
 
     @Cron('0 9 * * *') // 09:00 todos os dias
     async processDailyReminders() {
-        this.logger.log(`[PaymentReminder] Daily run at ${new Date().toISOString()}`);
-        await this.processPendingGpo();
-        await this.processAwaitingProofWithoutUrl();
-        await this.processAwaitingProofWithUrl();
-        await this.processCreditsDueSoonOrOverdue();
-        this.logger.log('[PaymentReminder] Daily run complete.');
+        try {
+            this.logger.log(`[PaymentReminder] Daily run at ${new Date().toISOString()}`);
+            await this.processPendingGpo();
+            await this.processAwaitingProofWithoutUrl();
+            await this.processAwaitingProofWithUrl();
+            await this.processCreditsDueSoonOrOverdue();
+            this.logger.log('[PaymentReminder] Daily run complete.');
+        } catch (error: any) {
+            this.logger.error(
+                `[Cron] PaymentReminderService.processDailyReminders failed: ${error?.message}`,
+                error?.stack,
+            );
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

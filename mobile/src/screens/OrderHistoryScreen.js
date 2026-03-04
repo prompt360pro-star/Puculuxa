@@ -1,42 +1,30 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-    View, Text, StyleSheet, FlatList, TouchableOpacity, LayoutAnimation,
-    UIManager, Platform, RefreshControl, SectionList
-} from 'react-native';
-import { ChevronLeft, ChevronDown, ChevronUp, Package, Clock, CheckCircle, Truck, XCircle, Paperclip, Eye, FileText, MessageCircle, ChevronRight } from 'lucide-react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, RefreshControl, SectionList } from 'react-native';
+import { ChevronDown, ChevronUp, Package, Clock, CheckCircle, Truck, XCircle, ChevronRight } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { ApiService } from '../services/api';
-import { Theme, T } from '../theme';
-import { Skeleton } from '../components/ui/Skeleton';
-import { PremiumButton } from '../components/ui/PremiumButton';
+import { TOKENS, Theme, textStyles } from '../theme';
+import { Screen, TopHeader, LedgerCard, StatusBadge, KpiRow, EmptyState, LoadingState, PrimaryButton, FadeInView } from '../components/base/BaseComponents';
 import { formatKz, formatDateAO } from '../utils/errorMessages';
+import { Text } from 'react-native';
 
-if (Platform.OS === 'android') {
-    UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
-
-// Order Status config (existing)
 const STATUS_CONFIG = {
-    PENDING: { label: 'Pendente', icon: Clock, bg: Theme.colors.warningBg, color: Theme.colors.warning },
-    CONFIRMED: { label: 'Confirmado', icon: CheckCircle, bg: Theme.colors.successBg, color: Theme.colors.success },
-    IN_PROGRESS: { label: 'Em Preparação', icon: Package, bg: Theme.colors.infoBg, color: Theme.colors.info },
-    DELIVERED: { label: 'Entregue', icon: Truck, bg: Theme.colors.successBg, color: Theme.colors.success },
-    CANCELLED: { label: 'Cancelado', icon: XCircle, bg: Theme.colors.errorBg, color: Theme.colors.error },
+    PENDING: { label: 'Pendente', icon: Clock, statusKey: 'PENDING' },
+    CONFIRMED: { label: 'Confirmado', icon: CheckCircle, statusKey: 'PAID' },
+    IN_PROGRESS: { label: 'Em Preparação', icon: Package, statusKey: 'PAID' },
+    DELIVERED: { label: 'Entregue', icon: Truck, statusKey: 'PAID' },
+    CANCELLED: { label: 'Cancelado', icon: XCircle, statusKey: 'OVERDUE' }, // Mapping to Danger tone
 };
 
-const FILTER_PILLS = ['Todos', 'Pendente', 'Em Preparação', 'Entregue', 'Cancelado'];
-
-// Quotation Status config
 const QUOTATION_STATUS_CONFIG = {
-    SUBMITTED: { label: 'Enviado', icon: 'paper-plane', color: '#3B82F6', step: 1 },
-    IN_REVIEW: { label: 'Em Análise', icon: 'eye', color: '#F59E0B', step: 2 },
-    PROPOSAL_SENT: { label: 'Proposta Pronta', icon: 'document-text', color: '#8B5CF6', step: 3 },
-    NEGOTIATING: { label: 'Em Negociação', icon: 'chatbubbles', color: '#EC4899', step: 3 },
-    ACCEPTED: { label: 'Aceite', icon: 'checkmark-circle', color: '#10B981', step: 4 },
-    CONVERTED: { label: 'Encomenda', icon: 'cube', color: Theme.colors.success, step: 5 },
+    SUBMITTED: { label: 'Enviado', icon: 'paper-plane', statusKey: 'UNPAID', step: 1 },
+    IN_REVIEW: { label: 'Em Análise', icon: 'eye', statusKey: 'PENDING', step: 2 },
+    PROPOSAL_SENT: { label: 'Proposta Pronta', icon: 'document-text', statusKey: 'PENDING', step: 3 },
+    NEGOTIATING: { label: 'Em Negociação', icon: 'chatbubbles', statusKey: 'PENDING', step: 3 },
+    ACCEPTED: { label: 'Aceite', icon: 'checkmark-circle', statusKey: 'PAID', step: 4 },
+    CONVERTED: { label: 'Encomenda', icon: 'cube', statusKey: 'PAID', step: 5 },
 };
 
 const QUOTATION_TIMELINE_STEPS = [
@@ -47,141 +35,128 @@ const QUOTATION_TIMELINE_STEPS = [
     { key: 'CONVERTED', shortLabel: 'Encomenda', step: 5 },
 ];
 
-const StatusBadge = ({ status }) => {
-    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
-    const Ic = cfg.icon;
-    return (
-        <View style={[sb.container, { backgroundColor: cfg.bg }]}>
-            <Ic size={12} color={cfg.color} />
-            <Text style={[sb.text, { color: cfg.color }]}>{cfg.label}</Text>
-        </View>
-    );
-};
+const FILTER_PILLS = ['Todos', 'Pendente', 'Em Preparação', 'Entregue', 'Cancelado'];
 
-const sb = StyleSheet.create({
-    container: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: Theme.radius.full },
-    text: { fontFamily: 'Poppins_600SemiBold', fontSize: 11 },
-});
-
-// Quotation Card (Section 1)
+// --- Quotation Card ---
 const QuotationCard = React.memo(({ quotation }) => {
     const navigation = useNavigation();
     const config = QUOTATION_STATUS_CONFIG[quotation.status] || QUOTATION_STATUS_CONFIG.SUBMITTED;
     const currentStep = config.step;
 
-    // Determine price to show
     let displayPrice = quotation.estimatedTotal;
     if (quotation.versions && quotation.versions.length > 0) {
-        displayPrice = quotation.versions[0].price; // latest version
+        displayPrice = quotation.versions[0].price;
     }
 
+    // Lucide/Ionicons interop wrapper for StatusBadge
+    const BadgeIcon = ({ size, color, ...props }) => (
+        <Ionicons name={config.icon} size={size} color={color} {...props} />
+    );
+
     return (
-        <TouchableOpacity
-            style={styles.quotationCard}
-            activeOpacity={0.9}
+        <TouchableOpacity 
+            activeOpacity={0.9} 
             onPress={() => navigation.navigate('OrderTracking', { quotationId: quotation.id, type: 'quotation' })}
         >
-            <View style={styles.qHeader}>
-                <View style={[styles.qBadge, { backgroundColor: `${config.color}20` }]}>
-                    <Ionicons name={config.icon} size={14} color={config.color} />
-                    <Text style={[styles.qBadgeText, { color: config.color }]}>{config.label}</Text>
+            <LedgerCard>
+                <View style={styles.cardHeaderRow}>
+                    <StatusBadge status={config.statusKey} label={config.label} icon={BadgeIcon} />
+                    <Text style={styles.cardDateText}>{formatDateAO(quotation.createdAt)}</Text>
                 </View>
-                <Text style={styles.qDate}>{formatDateAO(quotation.createdAt)}</Text>
-            </View>
 
-            <View style={styles.qBody}>
-                <Text style={styles.qTitle}>{quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1)}</Text>
-                <Text style={styles.qSubtitle}>{quotation.guestCount} convidados</Text>
-            </View>
+                <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle}>{quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1)}</Text>
+                    <Text style={styles.cardSubtitle}>{quotation.guestCount} convidados</Text>
+                </View>
 
-            <View style={styles.qTimeline}>
-                {QUOTATION_TIMELINE_STEPS.map((step, index) => {
-                    const isCompleted = step.step <= currentStep;
-                    const isCurrent = step.step === currentStep;
-                    const isPast = step.step < currentStep;
-                    const isLast = index === QUOTATION_TIMELINE_STEPS.length - 1;
+                <View style={styles.qTimeline}>
+                    {QUOTATION_TIMELINE_STEPS.map((step, index) => {
+                        const isCompleted = step.step <= currentStep;
+                        const isCurrent = step.step === currentStep;
+                        const isPast = step.step < currentStep;
+                        const isLast = index === QUOTATION_TIMELINE_STEPS.length - 1;
 
-                    const dotColor = isCompleted ? config.color : '#374151';
-                    const dotSize = isCurrent ? 14 : 10;
-                    const containerSize = isCurrent ? 28 : 24;
+                        // Premium Noir timeline map
+                        const dotColor = isCompleted ? TOKENS.colors.gold : TOKENS.colors.border;
+                        const dotSize = isCurrent ? 12 : 8;
+                        const containerSize = isCurrent ? 24 : 20;
 
-                    return (
-                        <View key={step.key} style={styles.qTimelineStepContainer}>
-                            <View style={styles.qTimelineDotContainer}>
-                                <View style={[
-                                    styles.qTimelineOuterDot,
-                                    { width: containerSize, height: containerSize, borderRadius: containerSize / 2 },
-                                    isCurrent && { borderWidth: 3, borderColor: Theme.colors.white, backgroundColor: dotColor }
-                                ]}>
-                                    {!isCurrent && <View style={[styles.qTimelineInnerDot, { backgroundColor: dotColor, width: dotSize, height: dotSize, borderRadius: dotSize / 2 }]} />}
+                        return (
+                            <View key={step.key} style={styles.qTimelineStepContainer}>
+                                <View style={styles.qTimelineDotContainer}>
+                                    <View style={[
+                                        styles.qTimelineOuterDot,
+                                        { width: containerSize, height: containerSize, borderRadius: containerSize / 2, transform: [{ translateX: -(containerSize / 2) }] },
+                                        isCurrent && { borderWidth: 2, borderColor: TOKENS.colors.surface, backgroundColor: dotColor }
+                                    ]}>
+                                        {!isCurrent && <View style={[styles.qTimelineInnerDot, { backgroundColor: dotColor, width: dotSize, height: dotSize, borderRadius: dotSize / 2 }]} />}
+                                    </View>
+                                    {!isLast && (
+                                        <View style={[styles.qTimelineLine, { backgroundColor: isPast ? TOKENS.colors.gold : TOKENS.colors.border }]} />
+                                    )}
                                 </View>
-                                {!isLast && (
-                                    <View style={[styles.qTimelineLine, { backgroundColor: isPast ? config.color : '#374151' }]} />
-                                )}
+                                <Text style={styles.qTimelineLabel}>{step.shortLabel}</Text>
                             </View>
-                            <Text style={styles.qTimelineLabel}>{step.shortLabel}</Text>
-                        </View>
-                    );
-                })}
-            </View>
+                        );
+                    })}
+                </View>
 
-            <View style={styles.qFooter}>
-                <Text style={styles.qPrice}>{formatKz(displayPrice)}</Text>
-                <ChevronRight size={20} color={Theme.colors.textTertiary} />
-            </View>
+                <View style={styles.cardFooter}>
+                    <Text style={styles.cardPrice}>{formatKz(displayPrice)}</Text>
+                    <ChevronRight size={20} color={TOKENS.colors.muted} />
+                </View>
+            </LedgerCard>
         </TouchableOpacity>
     );
 });
 
-
-// Order Card (Section 2)
+// --- Order Card ---
 const OrderCard = React.memo(({ order }) => {
     const [expanded, setExpanded] = useState(false);
     const navigation = useNavigation();
-
-    const toggleExpand = () => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setExpanded(!expanded);
-    };
+    const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.PENDING;
 
     return (
-        <TouchableOpacity style={styles.orderCard} onPress={toggleExpand} activeOpacity={0.9} accessibilityRole="button">
-            <View style={styles.orderHeader}>
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.orderId}>Pedido #{order.id?.toString().slice(-6)}</Text>
-                    <Text style={styles.orderDate}>{formatDateAO(order.createdAt)}</Text>
+        <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => setExpanded(!expanded)}
+        >
+            <LedgerCard>
+                <View style={styles.cardHeaderRow}>
+                    <StatusBadge status={config.statusKey} label={config.label} icon={config.icon} />
+                    <Text style={styles.cardDateText}>{formatDateAO(order.createdAt)}</Text>
                 </View>
-                <StatusBadge status={order.status} />
-                {expanded ? <ChevronUp size={16} color={Theme.colors.textTertiary} /> : <ChevronDown size={16} color={Theme.colors.textTertiary} />}
-            </View>
 
-            {expanded ? (
-                <View style={styles.orderExpanded}>
-                    <View style={styles.orderDetailRow}>
-                        <Text style={styles.orderDetailLabel}>Total</Text>
-                        <Text style={styles.orderDetailValue}>{formatKz(order.total)}</Text>
-                    </View>
-                    {order.items?.length > 0 ? (
-                        <View style={styles.orderDetailRow}>
-                            <Text style={styles.orderDetailLabel}>Items</Text>
-                            <Text style={styles.orderDetailValue}>{order.items.length}</Text>
-                        </View>
-                    ) : null}
-                    {order.status === 'IN_PROGRESS' || order.status === 'CONFIRMED' ? (
-                        <PremiumButton
-                            title="Acompanhar Pedido"
-                            onPress={() => navigation.navigate('OrderTracking', { orderId: order.id, type: 'order' })}
-                            variant="ghost"
-                            size="sm"
-                            style={{ marginTop: 12 }}
-                        />
-                    ) : null}
+                <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle}>Pedido #{order.id?.toString().slice(-6)}</Text>
+                    <Text style={styles.cardSubtitle}>
+                        {order.items?.length || 0} {(order.items?.length === 1) ? 'item' : 'items'}
+                    </Text>
                 </View>
-            ) : null}
+
+                <View style={styles.cardFooter}>
+                    <Text style={styles.cardPrice}>{formatKz(order.total)}</Text>
+                    {expanded ? <ChevronUp size={20} color={TOKENS.colors.muted} /> : <ChevronDown size={20} color={TOKENS.colors.muted} />}
+                </View>
+
+                {expanded && (
+                    <View style={styles.expandedSection}>
+                        {(order.status === 'IN_PROGRESS' || order.status === 'CONFIRMED') && (
+                            <PrimaryButton
+                                title="Acompanhar Pedido"
+                                onPress={() => navigation.navigate('OrderTracking', { orderId: order.id, type: 'order' })}
+                                size="sm"
+                                style={{ marginTop: TOKENS.spacing[4] }}
+                            />
+                        )}
+                    </View>
+                )}
+            </LedgerCard>
         </TouchableOpacity>
     );
 });
 
+// --- Main Screen ---
 export const OrderHistoryScreen = ({ navigation }) => {
     const [filter, setFilter] = useState('Todos');
 
@@ -235,15 +210,11 @@ export const OrderHistoryScreen = ({ navigation }) => {
     }
 
     const ListHeader = useMemo(() => (
-        <>
-            <LinearGradient colors={[Theme.colors.gradientStart, Theme.colors.gradientEnd]} style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                    <ChevronLeft size={22} color={Theme.colors.white} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Os Meus Pedidos</Text>
-                <View style={{ width: 36 }} />
-            </LinearGradient>
-
+        <View style={{ marginBottom: TOKENS.spacing[4] }}>
+            <TopHeader 
+                title="Pedidos" 
+                subtitle="Histórico e pedidos em curso" 
+            />
             <FlatList
                 data={FILTER_PILLS}
                 horizontal
@@ -252,135 +223,151 @@ export const OrderHistoryScreen = ({ navigation }) => {
                 contentContainerStyle={styles.filterRow}
                 renderItem={({ item }) => (
                     <TouchableOpacity
-                        style={[styles.filterPill, filter === item ? styles.filterPillActive : null]}
+                        style={[styles.filterPill, filter === item && styles.filterPillActive]}
                         onPress={() => setFilter(item)}
                         accessibilityRole="tab"
                         accessibilityState={{ selected: filter === item }}
                     >
-                        <Text style={[styles.filterText, filter === item ? styles.filterTextActive : null]}>{item}</Text>
+                        <Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item}</Text>
                     </TouchableOpacity>
                 )}
             />
-        </>
+        </View>
     ), [filter]);
 
-    const EmptyState = () => (
-        <View style={styles.emptyState}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>📦</Text>
-            <Text style={styles.emptyTitle}>Sem pedidos em curso</Text>
-            <Text style={styles.emptySubtitle}>Os teus pedidos e orçamentos aparecerão aqui.</Text>
-            <PremiumButton title="Pedir Orçamento" onPress={() => navigation.navigate('QuotationTab')} size="md" style={{ marginTop: 24 }} />
-        </View>
-    );
+    if (isLoading) {
+        return (
+            <Screen>
+                {ListHeader}
+                <LoadingState title="A carregar histórico..." />
+            </Screen>
+        );
+    }
 
     return (
-        <View style={styles.container}>
-            {ListHeader}
-
-            {isLoading ? (
-                <View style={{ paddingHorizontal: 20, gap: 12, marginTop: 16 }}>
-                    <Skeleton width="100%" height={140} borderRadius={16} />
-                    <Skeleton width="100%" height={140} borderRadius={16} />
-                </View>
-            ) : sections.length === 0 ? (
-                <EmptyState />
-            ) : (
-                <SectionList
-                    sections={sections}
-                    keyExtractor={(item) => item.id?.toString()}
-                    renderItem={({ item, section }) => {
-                        if (section.type === 'quotation') {
-                            return <QuotationCard quotation={item} />;
-                        }
-                        return <OrderCard order={item} />;
-                    }}
-                    renderSectionHeader={({ section }) => {
-                        if (section.type === 'order' && activeQuotations.length > 0) {
-                            return (
-                                <View style={styles.sectionSeparator}>
-                                    <View style={styles.sectionSeparatorLine} />
-                                    <Text style={styles.sectionSeparatorText}>{section.title}</Text>
-                                    <View style={styles.sectionSeparatorLine} />
-                                </View>
-                            );
-                        }
-                        return null;
-                    }}
-                    contentContainerStyle={styles.listContent}
-                    refreshControl={
-                        <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} colors={[Theme.colors.primary]} tintColor={Theme.colors.primary} />
-                    }
-                />
-            )}
-        </View>
+        <Screen contentContainerStyle={{ paddingHorizontal: 0 }}>
+            <SectionList
+                sections={sections}
+                keyExtractor={(item) => item.id?.toString()}
+                ListHeaderComponent={ListHeader}
+                ListEmptyComponent={
+                    <EmptyState 
+                        title="Sem pedidos" 
+                        subtitle="Os teus pedidos e orçamentos aparecerão aqui."
+                        actionTitle="Pedir Orçamento"
+                        onAction={() => navigation.navigate('QuotationTab')}
+                    />
+                }
+                renderItem={({ item, section, index }) => (
+                    <FadeInView delay={Math.min(index * 30, 240)}>
+                        <View style={{ paddingHorizontal: TOKENS.spacing[4] }}>
+                            {section.type === 'quotation' ? <QuotationCard quotation={item} /> : <OrderCard order={item} />}
+                        </View>
+                    </FadeInView>
+                )}
+                renderSectionHeader={({ section }) => (
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>{section.title}</Text>
+                        <View style={styles.sectionDivider} />
+                    </View>
+                )}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                    <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={TOKENS.colors.gold} />
+                }
+            />
+        </Screen>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0F0F0F' },
-    listContent: { paddingBottom: 32 },
-    header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 52, paddingBottom: 16, paddingHorizontal: 16,
+    listContent: { paddingBottom: TOKENS.spacing[12] },
+    
+    // Filters
+    filterRow: { paddingHorizontal: TOKENS.spacing[4], gap: TOKENS.spacing[2] },
+    filterPill: { 
+        paddingHorizontal: TOKENS.spacing[4], 
+        paddingVertical: TOKENS.spacing[2], 
+        borderRadius: TOKENS.radius.pill, 
+        backgroundColor: TOKENS.colors.surface, 
+        borderWidth: 1, 
+        borderColor: TOKENS.colors.border 
     },
-    backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { ...T.h3, color: Theme.colors.white },
-    filterRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
-    filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Theme.radius.full, backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#2A2A2A' },
-    filterPillActive: { backgroundColor: Theme.colors.primary, borderColor: Theme.colors.primary },
-    filterText: { fontFamily: T.bodySmall.fontFamily, fontSize: 12, color: Theme.colors.textSecondary },
-    filterTextActive: { color: Theme.colors.white, fontFamily: 'Poppins_600SemiBold' },
+    filterPillActive: { 
+        backgroundColor: TOKENS.colors.surface2, 
+        borderColor: TOKENS.colors.text 
+    },
+    filterText: { 
+        ...textStyles.small,
+        color: TOKENS.colors.muted 
+    },
+    filterTextActive: { 
+        color: TOKENS.colors.text, 
+        fontFamily: 'Inter_500Medium' 
+    },
 
-    // Order Card
-    orderCard: {
-        backgroundColor: '#1A1A1A',
-        marginHorizontal: 16,
-        marginBottom: 16,
-        borderRadius: 16,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: '#2A2A2A',
+    // Sections
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: TOKENS.spacing[4],
+        marginTop: TOKENS.spacing[8],
+        marginBottom: TOKENS.spacing[2],
     },
-    orderHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    orderId: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: Theme.colors.white },
-    orderDate: { ...T.bodySmall, color: Theme.colors.textTertiary, marginTop: 2 },
-    orderExpanded: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#2A2A2A' },
-    orderDetailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-    orderDetailLabel: { ...T.bodySmall, color: Theme.colors.textSecondary },
-    orderDetailValue: { ...T.body, fontFamily: 'Poppins_500Medium', color: Theme.colors.white },
+    sectionTitle: {
+        ...textStyles.caption,
+        color: TOKENS.colors.text,
+        marginRight: TOKENS.spacing[3],
+    },
+    sectionDivider: {
+        flex: 1,
+        height: 1,
+        backgroundColor: TOKENS.colors.border,
+    },
 
-    // Quotation Card
-    quotationCard: {
-        backgroundColor: '#1A1A1A',
-        marginHorizontal: 16,
-        marginBottom: 16,
-        borderRadius: 16,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: '#2A2A2A',
+    // Card Common
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: TOKENS.spacing[3],
     },
-    qHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    qBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 6 },
-    qBadgeText: { fontFamily: 'Poppins_600SemiBold', fontSize: 11 },
-    qDate: { fontSize: 12, color: '#9CA3AF', fontFamily: 'Poppins_400Regular' },
-    qBody: { marginBottom: 16 },
-    qTitle: { fontSize: 18, color: '#FFFFFF', fontFamily: 'Poppins_700Bold' },
-    qSubtitle: { fontSize: 13, color: '#9CA3AF', fontFamily: 'Poppins_400Regular', marginTop: 2 },
-    qTimeline: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16, paddingHorizontal: 4 },
+    cardDateText: {
+        ...textStyles.caption,
+        textTransform: 'none',
+    },
+    cardBody: {
+        marginBottom: TOKENS.spacing[4],
+    },
+    cardTitle: {
+        ...textStyles.h3,
+        marginBottom: TOKENS.spacing[1],
+    },
+    cardSubtitle: {
+        ...textStyles.small,
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: TOKENS.spacing[4],
+        borderTopWidth: 1,
+        borderTopColor: TOKENS.colors.border,
+    },
+    cardPrice: {
+        ...textStyles.h2,
+        color: TOKENS.colors.gold,
+    },
+    expandedSection: {
+        paddingTop: TOKENS.spacing[2],
+    },
+
+    // Quotation Timeline Mini
+    qTimeline: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: TOKENS.spacing[4] },
     qTimelineStepContainer: { alignItems: 'center', flex: 1 },
     qTimelineDotContainer: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 28 },
-    qTimelineOuterDot: { justifyContent: 'center', alignItems: 'center', zIndex: 1, position: 'absolute', left: '50%', transform: [{ translateX: -12 }] },
+    qTimelineOuterDot: { justifyContent: 'center', alignItems: 'center', zIndex: 1, position: 'absolute', left: '50%' },
     qTimelineInnerDot: {},
-    qTimelineLine: { height: 2, flex: 1, width: '100%', position: 'absolute', left: '50%', top: 13, zIndex: 0 },
-    qTimelineLabel: { fontSize: 9, color: '#9CA3AF', fontFamily: 'Poppins_500Medium', marginTop: 6, textAlign: 'center' },
-    qFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: '#2A2A2A' },
-    qPrice: { fontSize: 20, color: '#DC2626', fontFamily: 'Poppins_700Bold' },
-
-    sectionSeparator: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 24, marginBottom: 12 },
-    sectionSeparatorLine: { flex: 1, height: 1, backgroundColor: '#2A2A2A' },
-    sectionSeparatorText: { marginHorizontal: 12, fontSize: 14, color: '#9CA3AF', fontFamily: 'Poppins_600SemiBold' },
-
-    emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 40 },
-    emptyTitle: { ...T.h3, textAlign: 'center', color: Theme.colors.white, marginBottom: 8 },
-    emptySubtitle: { ...T.bodySmall, textAlign: 'center', color: Theme.colors.textTertiary },
+    qTimelineLine: { height: 1, flex: 1, width: '100%', position: 'absolute', left: '50%', top: 13, zIndex: 0 },
+    qTimelineLabel: { ...textStyles.caption, fontSize: 9, marginTop: TOKENS.spacing[1], textAlign: 'center', textTransform: 'none' },
 });

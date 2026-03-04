@@ -98,12 +98,18 @@ export class QuotationController {
     return this.quotationService.getByCustomer(userId as string);
   }
 
-  // ─── Detalhe (Admin) ───
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  // ─── Detalhe (Admin / Customer) ───
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.quotationService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req: any) {
+    const quotation = await this.quotationService.findOne(id);
+    const userId = req.user?.id || req.user?.sub;
+    const userRole = req.user?.role;
+    
+    if (userRole === 'CUSTOMER' && quotation?.customerId !== userId) {
+      throw new ForbiddenException('Não tem permissão para ver este orçamento');
+    }
+    return quotation;
   }
 
   // ─── Admin Brief (Intelligence) ───

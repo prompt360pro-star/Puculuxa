@@ -7,37 +7,41 @@ import {
     ActivityIndicator,
     View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Theme, T } from '../../theme';
+import * as Haptics from 'expo-haptics';
+import { TOKENS, textStyles, Theme } from '../../theme';
 
 const VARIANTS = {
     primary: {
-        gradient: [Theme.colors.primary, Theme.colors.primaryDark],
-        text: Theme.colors.textInverse,
+        bg: TOKENS.colors.red,
+        text: TOKENS.colors.textInverse,
+        border: null,
     },
     secondary: {
-        bg: Theme.colors.secondary,
-        text: Theme.colors.textInverse,
+        bg: TOKENS.colors.surface2,
+        text: TOKENS.colors.text,
+        border: TOKENS.colors.border,
     },
     ghost: {
         bg: 'transparent',
-        text: Theme.colors.primary,
-        border: Theme.colors.primary,
+        text: TOKENS.colors.red,
+        border: null,
     },
     danger: {
-        bg: Theme.colors.error,
-        text: Theme.colors.textInverse,
+        bg: TOKENS.colors.danger,
+        text: TOKENS.colors.textInverse,
+        border: null,
     },
     gold: {
-        gradient: [Theme.colors.gold, '#E6C200'],
-        text: '#1A1209',
+        bg: TOKENS.colors.gold,
+        text: '#1A1209', // Dark contrast for gold
+        border: null,
     },
 };
 
 const SIZES = {
-    sm: { height: 40, paddingHorizontal: 16, ...T.buttonSmall },
-    md: { height: 52, paddingHorizontal: 24, ...T.button },
-    lg: { height: 60, paddingHorizontal: 32, ...T.button, fontSize: 16 },
+    sm: { height: 40, paddingHorizontal: TOKENS.spacing[4], ...textStyles.small },
+    md: { height: 52, paddingHorizontal: TOKENS.spacing[6], ...textStyles.bodyMedium },
+    lg: { height: 60, paddingHorizontal: TOKENS.spacing[8], ...textStyles.bodyMedium, fontSize: 16 },
 };
 
 export const PremiumButton = ({
@@ -55,8 +59,9 @@ export const PremiumButton = ({
     const s = SIZES[size] || SIZES.md;
 
     const onPressIn = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         Animated.spring(scaleAnim, {
-            toValue: 0.97,
+            toValue: 0.96,
             friction: 10,
             tension: 80,
             useNativeDriver: true,
@@ -79,7 +84,7 @@ export const PremiumButton = ({
             ) : (
                 <>
                     {icon ? <View style={styles.iconWrap}>{icon}</View> : null}
-                    <Text style={[styles.text, { color: v.text, fontSize: s.fontSize || T.button.fontSize, fontFamily: T.button.fontFamily }]}>
+                    <Text style={[styles.text, { color: v.text, fontSize: s.fontSize, fontFamily: s.fontFamily }]}>
                         {title}
                     </Text>
                 </>
@@ -89,7 +94,11 @@ export const PremiumButton = ({
 
     const containerStyle = [
         styles.container,
-        !v.gradient ? { backgroundColor: v.bg, borderWidth: v.border ? 1.5 : 0, borderColor: v.border } : null,
+        { 
+            backgroundColor: v.bg, 
+            borderWidth: v.border ? 1.5 : 0, 
+            borderColor: v.border 
+        },
         { borderRadius: s.height / 2 },
         disabled ? styles.disabled : null,
         style,
@@ -107,20 +116,9 @@ export const PremiumButton = ({
                 accessibilityLabel={title}
                 accessibilityState={{ disabled: disabled || loading, busy: loading }}
             >
-                {v.gradient ? (
-                    <LinearGradient
-                        colors={v.gradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 0 }}
-                        style={[containerStyle, { overflow: 'hidden' }]}
-                    >
-                        {content}
-                    </LinearGradient>
-                ) : (
-                    <View style={containerStyle}>
-                        {content}
-                    </View>
-                )}
+                <View style={containerStyle}>
+                    {content}
+                </View>
             </TouchableOpacity>
         </Animated.View>
     );
@@ -128,20 +126,19 @@ export const PremiumButton = ({
 
 const styles = StyleSheet.create({
     container: {
-        ...Theme.elevation.sm,
+        ...TOKENS.shadowElite,
     },
     inner: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: TOKENS.spacing[2],
     },
     text: {
-        fontFamily: T.button.fontFamily,
-        letterSpacing: T.button.letterSpacing,
+        letterSpacing: 0.3,
     },
     iconWrap: {
-        marginRight: 4,
+        marginRight: TOKENS.spacing[1],
     },
     disabled: {
         opacity: 0.45,

@@ -6,6 +6,15 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import {
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import {
+    Fraunces_600SemiBold,
+    Fraunces_700Bold,
+} from '@expo-google-fonts/fraunces';
+import {
     Pacifico_400Regular
 } from '@expo-google-fonts/pacifico';
 import {
@@ -167,6 +176,11 @@ export default function App() {
         async function init() {
             try {
                 await Font.loadAsync({
+                    Inter_400Regular,
+                    Inter_500Medium,
+                    Inter_700Bold,
+                    Fraunces_600SemiBold,
+                    Fraunces_700Bold,
                     Pacifico_400Regular,
                     Merriweather_400Regular,
                     Merriweather_700Bold,

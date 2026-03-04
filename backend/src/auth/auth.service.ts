@@ -18,7 +18,7 @@ export class AuthService {
   ): Promise<Omit<User, 'password'> | null> {
     console.log(`\n\n[AUTH-DIAGNOSTIC] Tentativa de Login Recebida`);
     console.log(`[AUTH-DIAGNOSTIC] Email fornecido: "${email}"`);
-    console.log(`[AUTH-DIAGNOSTIC] Password fornecida: "${pass}"`);
+    console.log(`[AUTH-DIAGNOSTIC] Password fornecida: "***MASKED***"`);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
     console.log(`[AUTH-DIAGNOSTIC] Utilizador encontrado na DB:`, user ? `SIM (Role: ${user.role})` : `NÃO ENCONTRADO`);

@@ -11,12 +11,22 @@ import {
     Logger,
     HttpCode,
     Query,
+    UnauthorizedException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { IsString, IsOptional, IsDateString } from 'class-validator';
 import type { Request } from 'express';
 import { CreditService } from './credit.service';
+
+interface AuthenticatedRequest extends Request {
+    user?: {
+        id?: string;
+        sub?: string;
+        role?: string;
+        email?: string;
+    };
+}
 
 // ─── DTOs ───
 class ApproveCreditBodyDto {
@@ -55,9 +65,10 @@ export class CreditController {
     async approveCredit(
         @Param('orderId') orderId: string,
         @Body() dto: ApproveCreditBodyDto,
-        @Req() req: Request,
+        @Req() req: AuthenticatedRequest,
     ) {
-        const adminId = (req as any).user?.id || (req as any).user?.sub;
+        const adminId = req.user?.id || req.user?.sub;
+        if (!adminId) throw new UnauthorizedException('Admin ID is missing');
 
         const result = await this.creditService.markOrderAsCredit(orderId, adminId, {
             creditDueDate: new Date(dto.creditDueDate),
@@ -84,9 +95,10 @@ export class CreditController {
     async markPaid(
         @Param('orderId') orderId: string,
         @Body() dto: MarkPaidBodyDto,
-        @Req() req: Request,
+        @Req() req: AuthenticatedRequest,
     ) {
-        const adminId = (req as any).user?.id || (req as any).user?.sub;
+        const adminId = req.user?.id || req.user?.sub;
+        if (!adminId) throw new UnauthorizedException('Admin ID is missing');
 
         const order = await this.creditService.markCreditAsPaid(orderId, adminId, dto.reason);
 

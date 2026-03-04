@@ -53,6 +53,7 @@ export class AuthController {
     return result;
   }
 
+  @Throttle({ short: { ttl: 60000, limit: 3 } })
   @Post('register')
   @UsePipes(new ValidationPipe())
   async register(@Body() registerDto: RegisterDto) {
@@ -85,6 +86,7 @@ export class AuthController {
     return this.authService.savePushToken(id!, token);
   }
 
+  @Throttle({ short: { ttl: 60000, limit: 3 } })
   @Post('forgot-password')
   forgotPassword(@Body('email') email: string) {
     return this.authService.requestPasswordReset(email);

@@ -1,26 +1,24 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Modal, TextInput, ActivityIndicator, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Modal, TextInput, ActivityIndicator, Alert, Share } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ChevronLeft, CheckCircle, Package, Truck, Home, CreditCard, X, Building, UploadCloud, RefreshCw, AlertCircle } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import { ApiService } from '../services/api';
-import { Theme, T } from '../theme';
+import { TOKENS, Theme, textStyles } from '../theme';
 import { formatKz, formatDateAO } from '../utils/errorMessages';
-import { PremiumButton } from '../components/ui/PremiumButton';
-import { Skeleton } from '../components/ui/Skeleton';
+import { Screen, TopHeader, LedgerCard, StatusBadge, KpiRow, PrimaryButton, SecondaryButton, LoadingState, FadeInView } from '../components/base/BaseComponents';
+import { hapticMedium } from '../utils/haptics';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
-// Status config for Quotations
+// --- Configs ---
 const QUOTATION_STATUS_CONFIG = {
-    SUBMITTED: { label: 'Enviado', icon: 'paper-plane', color: '#3B82F6', step: 1, desc: 'O seu pedido foi enviado com sucesso.' },
-    IN_REVIEW: { label: 'Em Análise', icon: 'eye', color: '#F59E0B', step: 2, desc: 'A nossa equipa está a analisar a viabilidade.' },
-    PROPOSAL_SENT: { label: 'Proposta Pronta', icon: 'document-text', color: '#8B5CF6', step: 3, desc: 'Reveja a proposta e diga-nos o que achou.' },
-    NEGOTIATING: { label: 'Em Negociação', icon: 'chatbubbles', color: '#EC4899', step: 3, desc: 'A justar os detalhes conforme o seu feedback.' },
-    ACCEPTED: { label: 'Aceite', icon: 'checkmark-circle', color: '#10B981', step: 4, desc: 'Tudo acordado! Vamos avançar para a encomenda.' },
-    CONVERTED: { label: 'Encomenda Criada', icon: 'cube', color: Theme.colors.success, step: 5, desc: 'Foi gerado o seu pedido final. Acompanhe a entrega.' },
+    SUBMITTED: { label: 'Enviado', icon: 'paper-plane', color: '#3B82F6', step: 1, desc: 'O seu pedido foi enviado com sucesso.', statusKey: 'UNPAID' },
+    IN_REVIEW: { label: 'Em Análise', icon: 'eye', color: '#F59E0B', step: 2, desc: 'A nossa equipa está a analisar a viabilidade.', statusKey: 'PENDING' },
+    PROPOSAL_SENT: { label: 'Proposta Pronta', icon: 'document-text', color: '#8B5CF6', step: 3, desc: 'Reveja a proposta e diga-nos o que achou.', statusKey: 'PENDING' },
+    NEGOTIATING: { label: 'Em Negociação', icon: 'chatbubbles', color: '#EC4899', step: 3, desc: 'A justar os detalhes conforme o seu feedback.', statusKey: 'PENDING' },
+    ACCEPTED: { label: 'Aceite', icon: 'checkmark-circle', color: '#10B981', step: 4, desc: 'Tudo acordado! Vamos avançar para a encomenda.', statusKey: 'PAID' },
+    CONVERTED: { label: 'Encomenda Criada', icon: 'cube', color: TOKENS.colors.success, step: 5, desc: 'Foi gerado o seu pedido final. Acompanhe a entrega.', statusKey: 'PAID' },
 };
 
 const QUOTATION_TIMELINE = [
@@ -31,24 +29,21 @@ const QUOTATION_TIMELINE = [
     { key: 'CONVERTED' },
 ];
 
-// Financial status config
 const FINANCIAL_STATUS_CONFIG = {
-    UNPAID: { label: 'Por Pagar', color: '#EF4444', bg: '#EF444420' },
-    PARTIALLY_PAID: { label: 'Pago Parcial', color: '#F59E0B', bg: '#F59E0B20' },
-    PAID: { label: 'Pago \u2705', color: '#10B981', bg: '#10B98120' },
-    IN_CREDIT: { label: 'Crédito', color: '#3B82F6', bg: '#3B82F620' },
-    OVERDUE: { label: 'Em Atraso', color: '#DC2626', bg: '#DC262620' },
+    UNPAID: { label: 'Por Pagar', tone: 'danger', statusKey: 'UNPAID' },
+    PARTIALLY_PAID: { label: 'Pago Parcial', tone: 'warning', statusKey: 'PENDING' },
+    PAID: { label: 'Pago ✅', tone: 'success', statusKey: 'PAID' },
+    IN_CREDIT: { label: 'Crédito', tone: 'gold', statusKey: 'IN_CREDIT' },
+    OVERDUE: { label: 'Em Atraso', tone: 'danger', statusKey: 'OVERDUE' },
 };
 
 export const OrderTrackingScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { orderId, quotationId, type } = route.params || {};
-
     const isQuotation = type === 'quotation';
 
-    // Se for Orçamento, buscamos a lista de quotations da cache ou API e filtramos
-    const { data: quotations = [], isLoading: loadingQuotations } = useQuery({
+    const { data: quotations = [], isLoading: loadingQuotations, refetch: refetchQuotations, isRefetching: isRefetchingQuotations } = useQuery({
         queryKey: ['myQuotations'],
         queryFn: () => ApiService.getMyQuotations(),
         enabled: isQuotation,
@@ -59,19 +54,17 @@ export const OrderTrackingScreen = () => {
         return quotations.find(q => q.id === quotationId);
     }, [quotations, quotationId, isQuotation]);
 
-    // Animação para a badge "Aguarda Confirmação"
     const pulseAnim = useRef(new Animated.Value(1)).current;
-
     const queryClient = useQueryClient();
 
     const acceptMutation = useMutation({
         mutationFn: () => ApiService.updateQuotationStatus(quotationId, 'ACCEPTED'),
         onSuccess: () => {
             queryClient.invalidateQueries(['myQuotations']);
-            alert('Sucesso: Proposta aceite com sucesso!');
+            Alert.alert('Sucesso', 'Proposta aceite com sucesso!');
         },
         onError: (err) => {
-            alert('Erro: Não foi possível aceitar a proposta. ' + err.message);
+            Alert.alert('Erro', 'Não foi possível aceitar a proposta. ' + err.message);
         }
     });
 
@@ -81,7 +74,10 @@ export const OrderTrackingScreen = () => {
             'Tem a certeza que deseja aceitar a proposta? A equipa Puculuxa irá avançar com a sua encomenda.',
             [
                 { text: 'Cancelar', style: 'cancel' },
-                { text: 'Sim, Aceito', style: 'default', onPress: () => acceptMutation.mutate() },
+                { text: 'Sim, Aceito', style: 'default', onPress: () => {
+                    hapticMedium();
+                    acceptMutation.mutate();
+                } },
             ]
         );
     };
@@ -97,25 +93,24 @@ export const OrderTrackingScreen = () => {
         }
     }, [isQuotation, quotation?.status]);
 
+
     // ═══════════════════════════════════════════════
-    // QUOTATION FLOW (unchanged)
+    // QUOTATION FLOW
     // ═══════════════════════════════════════════════
     if (isQuotation) {
         if (loadingQuotations || !quotation) {
             return (
-                <View style={styles.container}>
-                    <View style={styles.header}>
-                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                            <ChevronLeft size={22} color={Theme.colors.white} />
-                        </TouchableOpacity>
-                        <Text style={styles.title}>Rastreio de Orçamento</Text>
-                        <View style={{ width: 40 }} />
-                    </View>
-                    <View style={{ padding: 20, gap: 16 }}>
-                        <Skeleton width="100%" height={100} borderRadius={16} />
-                        <Skeleton width="100%" height={300} borderRadius={16} />
-                    </View>
-                </View>
+                <Screen scroll>
+                    <TopHeader 
+                        title="Rastreio" 
+                        rightAction={
+                            <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Voltar">
+                                <ChevronLeft size={24} color={TOKENS.colors.text} />
+                            </TouchableOpacity>
+                        } 
+                    />
+                    <LoadingState title="A carregar orçamento..." />
+                </Screen>
             );
         }
 
@@ -123,70 +118,69 @@ export const OrderTrackingScreen = () => {
         const currentStep = config.step;
         const displayPrice = quotation.versions?.length > 0 ? quotation.versions[0].price : quotation.estimatedTotal;
 
-        return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                        <ChevronLeft size={22} color={Theme.colors.white} />
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Rastreio</Text>
-                    <View style={{ width: 40 }} />
-                </View>
+        const refreshAction = (
+            <View style={{ flexDirection: 'row', gap: TOKENS.spacing[4] }}>
+                <TouchableOpacity onPress={() => refetchQuotations()} disabled={isRefetchingQuotations}>
+                    <RefreshCw size={24} color={TOKENS.colors.text} style={{ opacity: isRefetchingQuotations ? 0.5 : 1 }} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Voltar">
+                    <ChevronLeft size={24} color={TOKENS.colors.text} />
+                </TouchableOpacity>
+            </View>
+        );
 
-                <ScrollView contentContainerStyle={styles.content}>
-                    <View style={styles.metaCard}>
-                        <Text style={styles.metaTitle}>{quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1)}</Text>
-                        <View style={styles.metaRow}>
-                            <Text style={styles.metaLabel}>Data do Evento:</Text>
-                            <Text style={styles.metaValue}>{quotation.eventDate ? formatDateAO(quotation.eventDate) : 'A definir'}</Text>
+        return (
+            <Screen scroll>
+                <TopHeader title="Rastreio" rightAction={refreshAction} style={{ paddingHorizontal: 0 }} />
+
+                <FadeInView delay={0}>
+                    <LedgerCard>
+                        <View style={styles.cardHeaderRow}>
+                            <StatusBadge status={config.statusKey} label={config.label} icon={({ size, color }) => <Ionicons name={config.icon} size={size} color={color} />} />
+                            <Text style={styles.cardDateText}>{quotation.eventDate ? formatDateAO(quotation.eventDate) : 'A definir'}</Text>
                         </View>
-                        <View style={styles.metaRow}>
-                            <Text style={styles.metaLabel}>Convidados:</Text>
-                            <Text style={styles.metaValue}>{quotation.guestCount}</Text>
-                        </View>
+                        <KpiRow label="Tipo de Evento" value={quotation.eventType.charAt(0).toUpperCase() + quotation.eventType.slice(1)} />
+                        <KpiRow label="Convidados" value={quotation.guestCount} />
                         {quotation.complements?.length > 0 && (
-                            <View style={styles.metaRow}>
-                                <Text style={styles.metaLabel}>Complementos:</Text>
-                                <Text style={styles.metaValue}>{quotation.complements.map(c => c.name).join(', ')}</Text>
+                            <View style={{ marginBottom: TOKENS.spacing[4] }}>
+                                <Text style={styles.kpiLabel}>Complementos:</Text>
+                                <Text style={styles.kpiValueSmall}>{quotation.complements.map(c => c.name).join(', ')}</Text>
                             </View>
                         )}
-                        <View style={[styles.metaRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#2A2A2A' }]}>
-                            <Text style={[styles.metaLabel, { fontSize: 16 }]}>Orçamento (Aprox.):</Text>
-                            <Text style={styles.metaPrice}>{formatKz(displayPrice)}</Text>
-                        </View>
+                        <View style={styles.kpiDivider} />
+                        <KpiRow label="Orçamento (Aprox.)" value={formatKz(displayPrice)} tone="gold" />
+                    </LedgerCard>
+                </FadeInView>
+
+
+                {quotation.status === 'PROPOSAL_SENT' && (
+                    <View style={{ marginBottom: TOKENS.spacing[6], gap: TOKENS.spacing[4] }}>
+                        <PrimaryButton
+                            title={acceptMutation.isPending ? "A processar..." : "Aceitar Proposta"}
+                            disabled={acceptMutation.isPending}
+                            onPress={handleAccept}
+                            style={{ backgroundColor: TOKENS.colors.success }}
+                        />
+                        <SecondaryButton
+                            title="Descarregar Proposta (PDF)"
+                            onPress={() => {
+                                const { Linking } = require('react-native');
+                                const { API_CONFIG } = require('../config/api.config');
+                                Linking.openURL(`${API_CONFIG.BASE_URL}/quotations/${quotationId}/pdf`);
+                            }}
+                        />
                     </View>
+                )}
 
-                    {quotation.status === 'PROPOSAL_SENT' && (
-                        <View style={{ marginBottom: 24, gap: 12 }}>
-                            <PremiumButton
-                                title={acceptMutation.isPending ? "A processar..." : "\u2705 Aceitar Proposta"}
-                                size="md"
-                                disabled={acceptMutation.isPending}
-                                onPress={handleAccept}
-                                style={{ backgroundColor: '#10B981', borderColor: '#059669' }}
-                            />
-                            <PremiumButton
-                                title="\u2b07\ufe0f Descarregar Proposta (PDF)"
-                                size="md"
-                                onPress={() => {
-                                    const { Linking } = require('react-native');
-                                    const { API_CONFIG } = require('../config/api.config');
-                                    Linking.openURL(`${API_CONFIG.BASE_URL}/quotations/${quotationId}/pdf`);
-                                }}
-                                style={{ backgroundColor: '#1F2937', borderColor: '#374151' }}
-                            />
-                        </View>
-                    )}
+                {quotation.status === 'ACCEPTED' && (
+                    <Animated.View style={[styles.pulseBadge, { opacity: pulseAnim }]}>
+                        <AlertCircle size={20} color={TOKENS.colors.warning} style={{ marginRight: TOKENS.spacing[2] }} />
+                        <Text style={styles.pulseText}>Aguarda Confirmação Final</Text>
+                    </Animated.View>
+                )}
 
-                    {quotation.status === 'ACCEPTED' && (
-                        <Animated.View style={[styles.pulseBadge, { opacity: pulseAnim }]}>
-                            <Ionicons name="alert-circle" size={20} color="#F59E0B" style={{ marginRight: 8 }} />
-                            <Text style={styles.pulseText}>Aguarda Confirmação Final</Text>
-                        </Animated.View>
-                    )}
-
+                <FadeInView delay={30}>
                     <Text style={styles.sectionTitle}>Progresso</Text>
-
                     <View style={styles.timeline}>
                         {QUOTATION_TIMELINE.map((item, index) => {
                             const stepCfg = QUOTATION_STATUS_CONFIG[item.key];
@@ -195,32 +189,31 @@ export const OrderTrackingScreen = () => {
                                 activeCfg = QUOTATION_STATUS_CONFIG.NEGOTIATING;
                             }
 
-                            const isCompleted = activeCfg.step < currentStep;
+                            const isCompleted = activeCfg.step <= currentStep;
                             const isCurrent = activeCfg.step === currentStep;
                             const isFuture = activeCfg.step > currentStep;
                             const isLast = index === QUOTATION_TIMELINE.length - 1;
+
+                            const dotColor = isCompleted ? TOKENS.colors.gold : TOKENS.colors.border;
+                            const iconColor = isCompleted ? TOKENS.colors.textInverse : (isCurrent ? TOKENS.colors.gold : TOKENS.colors.muted);
 
                             return (
                                 <View key={item.key} style={styles.stepContainer}>
                                     <View style={styles.stepLeft}>
                                         <View style={[
                                             styles.iconBox,
-                                            isFuture ? styles.iconBoxFuture : { backgroundColor: `${activeCfg.color}20` },
-                                            isCurrent && { borderWidth: 1, borderColor: activeCfg.color }
+                                            isCompleted ? { backgroundColor: TOKENS.colors.gold } : { backgroundColor: TOKENS.colors.surface2 },
+                                            isCurrent && { borderWidth: 1, borderColor: TOKENS.colors.gold }
                                         ]}>
-                                            <Ionicons
-                                                name={activeCfg.icon}
-                                                size={18}
-                                                color={isFuture ? '#6B7280' : activeCfg.color}
-                                            />
+                                            <Ionicons name={activeCfg.icon} size={18} color={iconColor} />
                                         </View>
-                                        {!isLast && <View style={[styles.timelineLine, isCompleted ? { backgroundColor: activeCfg.color } : { backgroundColor: '#2A2A2A' }]} />}
+                                        {!isLast && <View style={[styles.timelineLine, { backgroundColor: isCompleted ? TOKENS.colors.gold : TOKENS.colors.border }]} />}
                                     </View>
                                     <View style={styles.stepRight}>
-                                        <Text style={[styles.stepTitle, (isCompleted || isCurrent) ? { color: '#FFFFFF' } : { color: '#6B7280' }]}>
+                                        <Text style={[styles.stepTitle, (isCompleted || isCurrent) ? { color: TOKENS.colors.text } : { color: TOKENS.colors.muted }]}>
                                             {activeCfg.label}
                                         </Text>
-                                        <Text style={[styles.stepDesc, (isCompleted || isCurrent) ? { color: '#9CA3AF' } : { color: '#4B5563' }]}>
+                                        <Text style={[styles.stepDesc, (isCompleted || isCurrent) ? { color: TOKENS.colors.textTertiary } : { color: `${TOKENS.colors.muted}80` }]}>
                                             {activeCfg.desc}
                                         </Text>
                                     </View>
@@ -228,47 +221,41 @@ export const OrderTrackingScreen = () => {
                             );
                         })}
                     </View>
-                </ScrollView>
-            </View>
+                </FadeInView>
+            </Screen>
         );
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // ORDER FLOW — Real data + Multicaixa Express + Bank Transfer (FASE 10B)
+    // ORDER FLOW 
     // ═══════════════════════════════════════════════════════════════
     return <OrderPaymentFlow orderId={orderId} />;
 };
 
-// ─── Separate component for order payment flow (clean hook usage) ───
+// ─── Separate component for order payment flow ───
 const OrderPaymentFlow = ({ orderId }) => {
     const navigation = useNavigation();
     const queryClient = useQueryClient();
 
-    // State
     const [payModalVisible, setPayModalVisible] = useState(false);
     const [phoneNumber, setPhoneNumber] = useState('');
     const [paymentInitiated, setPaymentInitiated] = useState(false);
-
-    // Bank Transfer State
-    const [activeTransferInfo, setActiveTransferInfo] = useState(null); // { payment, invoice, bankDetails }
+    const [activeTransferInfo, setActiveTransferInfo] = useState(null); 
     const pollTimerRef = useRef(null);
     const pollCountRef = useRef(0);
 
-    // ── Fetch real order data ──
     const { data: order, isLoading: loadingOrder, refetch: refetchOrder, isRefetching: isRefetchingOrder } = useQuery({
         queryKey: ['order', orderId],
         queryFn: () => ApiService.getOrderById(orderId),
         enabled: !!orderId,
     });
 
-    // ── Fetch payments for this order ──
     const { data: payments = [], refetch: refetchPayments, isRefetching: isRefetchingPayments } = useQuery({
         queryKey: ['payments', orderId],
         queryFn: () => ApiService.getPaymentsByOrder(orderId),
         enabled: !!orderId,
     });
 
-    // ── GPO Mutation ──
     const gpoMutation = useMutation({
         mutationFn: ({ oid, phone }) => ApiService.initiateGpoPayment(oid, phone),
         onSuccess: () => {
@@ -276,36 +263,29 @@ const OrderPaymentFlow = ({ orderId }) => {
             setPaymentInitiated(true);
             setActiveTransferInfo(null);
             startGpoPolling();
-            Alert.alert(
-                'Pedido Enviado \u2705',
-                'Confirme o pagamento na app Multicaixa Express do seu telemóvel.',
-                [{ text: 'OK' }]
-            );
+            Alert.alert('Pedido Enviado ✅', 'Confirme o pagamento na app Multicaixa Express do seu telemóvel.', [{ text: 'OK' }]);
         },
         onError: (err) => {
             Alert.alert('Erro no Pagamento', err.message || 'Tente novamente.');
         },
     });
 
-    // ── Bank Transfer Mutation ──
     const transferMutation = useMutation({
         mutationFn: (oid) => ApiService.createBankTransfer(oid),
         onSuccess: (data) => {
-            // Guardar info para renderizar painel IBAN
             setActiveTransferInfo(data);
-            setPaymentInitiated(false); // Reset GPO state if any
+            setPaymentInitiated(false);
         },
         onError: (err) => {
             Alert.alert('Erro na Transferência', err.message || 'Não foi possível gerar os dados.');
         }
     });
 
-    // ── Upload Proof Mutation ──
     const uploadMutation = useMutation({
         mutationFn: ({ paymentId, fileUri, fileName, mimeType }) =>
             ApiService.uploadPaymentProof(paymentId, fileUri, fileName, mimeType),
         onSuccess: () => {
-            Alert.alert('Submetido \u2705', 'Comprovativo enviado. Aguarde validação da tesouraria.');
+            Alert.alert('Submetido ✅', 'Comprovativo enviado. Aguarde validação da tesouraria.');
             handleManualRefresh();
         },
         onError: (err) => {
@@ -313,8 +293,8 @@ const OrderPaymentFlow = ({ orderId }) => {
         }
     });
 
-    // ── Polling para GPO: refetch every 5s for 60s ──
     const startGpoPolling = useCallback(() => {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         pollCountRef.current = 0;
         pollTimerRef.current = setInterval(async () => {
             pollCountRef.current += 1;
@@ -326,20 +306,18 @@ const OrderPaymentFlow = ({ orderId }) => {
                 clearInterval(pollTimerRef.current);
                 if (freshOrder?.financialStatus === 'PAID') {
                     setPaymentInitiated(false);
-                    Alert.alert('Pagamento Confirmado \u2705', 'O seu pagamento Multicaixa foi recebido com sucesso!');
+                    Alert.alert('Pagamento Confirmado ✅', 'O seu pagamento Multicaixa foi recebido com sucesso!');
                 }
             }
         }, 5000);
     }, [orderId, refetchOrder, refetchPayments, queryClient]);
 
-    // Cleanup
     useEffect(() => {
         return () => {
             if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         };
     }, []);
 
-    // ── Handlers ──
     const handlePayPress = () => {
         setPhoneNumber('244');
         setPayModalVisible(true);
@@ -351,6 +329,7 @@ const OrderPaymentFlow = ({ orderId }) => {
             Alert.alert('Número inválido', 'Insira o número no formato 244XXXXXXXXX (12 dígitos).');
             return;
         }
+        hapticMedium();
         gpoMutation.mutate({ oid: orderId, phone: cleaned });
     };
 
@@ -371,6 +350,7 @@ const OrderPaymentFlow = ({ orderId }) => {
             });
 
             if (result.canceled) return;
+            hapticMedium();
             const file = result.assets[0];
 
             uploadMutation.mutate({
@@ -387,11 +367,12 @@ const OrderPaymentFlow = ({ orderId }) => {
     const handleShareBankDetails = async () => {
         if (!activeTransferInfo) return;
         const { bankDetails, payment, invoice } = activeTransferInfo;
+        const bankName = bankDetails.bankName || bankDetails.bank;
         const message = `Puculuxa — Detalhes para Transferência\n\n` +
-            `Banco: ${bankDetails.bankName}\n` +
+            `Banco: ${bankName}\n` +
             `Beneficiário: ${bankDetails.beneficiary}\n` +
             `IBAN: ${bankDetails.iban}\n` +
-            `NIF: ${invoice?.debtorEntityNif || "--"}\n\n` +
+            `NIF: ${bankDetails.nif || "--"}\n\n` +
             `Valor: ${formatKz(order?.total || 0)}\n` +
             `Referência: ${payment.merchantRef}\n\n` +
             `Agradecemos a preferência!`;
@@ -403,107 +384,98 @@ const OrderPaymentFlow = ({ orderId }) => {
         }
     };
 
-    // ── Status e Regras de Negócio ──
     const financialStatus = order?.financialStatus || 'UNPAID';
     const statusCfg = FINANCIAL_STATUS_CONFIG[financialStatus] || FINANCIAL_STATUS_CONFIG.UNPAID;
     const isPaid = financialStatus === 'PAID';
     const isCredit = order?.paymentMode === 'GOVERNMENT_CREDIT' || ['IN_CREDIT', 'OVERDUE'].includes(financialStatus);
 
     const lastPayment = payments.length > 0 ? payments[payments.length - 1] : null;
-    const isAwaitingProof = lastPayment && lastPayment.status === 'AWAITING_PROOF' && lastPayment.paymentMethod === 'BANK_TRANSFER';
+    const paymentMethod = lastPayment?.method || lastPayment?.paymentMethod;
+    const isAwaitingProof = lastPayment && lastPayment.status === 'AWAITING_PROOF' && paymentMethod === 'BANK_TRANSFER';
     const isFailed = lastPayment && lastPayment.status === 'FAILED';
     const isTransferPanelActive = activeTransferInfo != null && !isPaid;
 
-    // Loading
+    const refreshAction = (
+        <View style={{ flexDirection: 'row', gap: TOKENS.spacing[4] }}>
+            <TouchableOpacity onPress={handleManualRefresh} disabled={isRefetchingOrder || isRefetchingPayments}>
+                <RefreshCw size={24} color={TOKENS.colors.text} style={{ opacity: (isRefetchingOrder || isRefetchingPayments) ? 0.5 : 1 }} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.goBack()} accessibilityLabel="Voltar">
+                <ChevronLeft size={24} color={TOKENS.colors.text} />
+            </TouchableOpacity>
+        </View>
+    );
+
     if (loadingOrder) {
         return (
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                        <ChevronLeft size={22} color={Theme.colors.white} />
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Rastreio da Encomenda</Text>
-                    <View style={{ width: 40 }} />
-                </View>
-                <View style={{ padding: 20, gap: 16 }}>
-                    <Skeleton width="100%" height={120} borderRadius={16} />
-                    <Skeleton width="100%" height={80} borderRadius={16} />
-                    <Skeleton width="100%" height={200} borderRadius={16} />
-                </View>
-            </View>
+            <Screen scroll>
+                <TopHeader title="Rastreio" rightAction={refreshAction} style={{ paddingHorizontal: 0 }} />
+                <LoadingState title="A carregar encomenda..." />
+            </Screen>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} accessibilityLabel="Voltar">
-                    <ChevronLeft size={22} color={Theme.colors.white} />
-                </TouchableOpacity>
-                <Text style={styles.title}>Rastreio da Encomenda</Text>
-                <TouchableOpacity onPress={handleManualRefresh} style={styles.refreshBtn}>
-                    <RefreshCw size={20} color={Theme.colors.white} />
-                </TouchableOpacity>
-            </View>
+        <Screen scroll>
+            <TopHeader title="Rastreio" rightAction={refreshAction} style={{ paddingHorizontal: 0 }} />
 
-            <ScrollView contentContainerStyle={styles.content}>
-                {/* ── Order Info Card ── */}
-                <View style={styles.metaCard}>
-                    <Text style={styles.metaTitle}>Encomenda</Text>
-                    <View style={styles.metaRow}>
-                        <Text style={styles.metaLabel}>Referência:</Text>
-                        <Text style={[styles.metaValue, { fontFamily: 'Poppins_600SemiBold' }]}>#{(orderId || '').slice(-8).toUpperCase()}</Text>
+            {/* ── Order Info Card ── */}
+            <FadeInView delay={0}>
+                <LedgerCard>
+                    <View style={styles.cardHeaderRow}>
+                        <StatusBadge status={statusCfg.statusKey} label={statusCfg.label} />
+                        <Text style={styles.cardDateText}>{order?.createdAt ? formatDateAO(order.createdAt) : '--'}</Text>
                     </View>
-                    <View style={styles.metaRow}>
-                        <Text style={styles.metaLabel}>Data:</Text>
-                        <Text style={styles.metaValue}>{order?.createdAt ? formatDateAO(order.createdAt) : '--'}</Text>
-                    </View>
-                    <View style={styles.metaRow}>
-                        <Text style={styles.metaLabel}>Estado logístico:</Text>
-                        <Text style={[styles.metaValue, { color: Theme.colors.success }]}>{order?.status || '--'}</Text>
-                    </View>
-                    <View style={[styles.metaRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#2A2A2A' }]}>
-                        <Text style={[styles.metaLabel, { fontSize: 16 }]}>Total a Pagar:</Text>
-                        <Text style={styles.metaPrice}>{formatKz(order?.total || 0)}</Text>
-                    </View>
-                </View>
 
-                {/* ── Financial Status Card ── */}
-                <View style={[styles.financeCard, { borderColor: statusCfg.color + '40' }]}>
-                    <View style={styles.financeHeader}>
-                        <CreditCard size={18} color={statusCfg.color} />
-                        <Text style={[styles.financeTitle, { color: statusCfg.color }]}>Estado Financeiro</Text>
+                    <KpiRow label="Referência" value={`#${(orderId || '').slice(-8).toUpperCase()}`} />
+                    <KpiRow label="Estado logístico" value={order?.status || '--'} tone={order?.status === 'DELIVERED' ? 'success' : 'default'} />
+                    
+                    <View style={styles.kpiDivider} />
+                    <KpiRow label="Total a Pagar" value={formatKz(order?.total || 0)} />
+                </LedgerCard>
+            </FadeInView>
+
+            {/* ── Financial Status Card ── */}
+            <FadeInView delay={30}>
+                <LedgerCard style={{ marginTop: TOKENS.spacing[4], marginBottom: TOKENS.spacing[6] }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: TOKENS.spacing[2], marginBottom: TOKENS.spacing[4] }}>
+                        <CreditCard size={18} color={TOKENS.colors.text} />
+                        <Text style={textStyles.h3}>Estado Financeiro</Text>
                     </View>
-                    <View style={[styles.financeBadge, { backgroundColor: statusCfg.bg }]}>
-                        <Text style={[styles.financeBadgeText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
-                    </View>
+                    
+                    <KpiRow label="Situação" value={statusCfg.label} tone={statusCfg.tone} />
+                    
                     {order?.paymentMode && (
-                        <Text style={styles.financeMode}>
+                        <Text style={[textStyles.small, { color: TOKENS.colors.muted, marginTop: TOKENS.spacing[2] }]}>
                             Modo: {order.paymentMode === 'APPYPAY_GPO' ? 'Multicaixa Express' : order.paymentMode === 'BANK_TRANSFER' ? 'Transferência Bancária' : order.paymentMode === 'GOVERNMENT_CREDIT' ? 'Crédito Institucional' : order.paymentMode}
                         </Text>
                     )}
                     {(isRefetchingOrder || isRefetchingPayments) && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-                            <ActivityIndicator size="small" color="#9CA3AF" />
-                            <Text style={{ color: '#9CA3AF', marginLeft: 8, fontSize: 12 }}>A sincronizar estado...</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: TOKENS.spacing[2] }}>
+                            <ActivityIndicator size="small" color={TOKENS.colors.muted} />
+                            <Text style={[textStyles.small, { color: TOKENS.colors.muted, marginLeft: TOKENS.spacing[2] }]}>A sincronizar estado...</Text>
                         </View>
                     )}
-                </View>
+                </LedgerCard>
+            </FadeInView>
 
-                {/* ── Institutional Credit Informative Panel ── */}
-                {isCredit && (
+            {/* ── Institutional Credit Informative Panel ── */}
+            {isCredit && (
+                <FadeInView delay={60}>
                     <View style={styles.creditCard}>
-                        <Building size={24} color="#3B82F6" style={{ marginBottom: 8 }} />
+                        <Building size={24} color={TOKENS.colors.gold} style={{ marginBottom: TOKENS.spacing[2] }} />
                         <Text style={styles.creditTitle}>Crédito Institucional</Text>
                         <Text style={styles.creditDesc}>Este pedido encontra-se sob acordo de Crédito Institucional. O pagamento será processado via Ordem de Saque / Tesouraria no prazo acordado.</Text>
                     </View>
-                )}
+                </FadeInView>
+            )}
 
-                {/* ── Bank Transfer Panel (Active Flow) ── */}
-                {isTransferPanelActive && !isCredit && (
-                    <View style={styles.transferPanel}>
-                        <Text style={styles.transferTitle}>\ud83c\udfe6 Dados de Transferência (BAI)</Text>
-                        <Text style={styles.transferSubtitle}>Efetue o pagamento e envie o comprovativo.</Text>
+            {/* ── Bank Transfer Panel (Active Flow) ── */}
+            {isTransferPanelActive && !isCredit && (
+                <FadeInView delay={60}>
+                    <LedgerCard style={{ marginBottom: TOKENS.spacing[6] }}>
+                        <Text style={textStyles.h3}>🏦 Dados de Transferência (BAI)</Text>
+                        <Text style={[textStyles.body, { color: TOKENS.colors.muted, marginBottom: TOKENS.spacing[4] }]}>Efetue o pagamento e envie o comprovativo.</Text>
 
                         <View style={styles.ibanBox}>
                             <View style={styles.ibanRow}>
@@ -512,7 +484,7 @@ const OrderPaymentFlow = ({ orderId }) => {
                             </View>
                             <View style={styles.ibanRow}>
                                 <Text style={styles.ibanLabel}>Banco</Text>
-                                <Text style={styles.ibanValue}>{activeTransferInfo.bankDetails.bankName}</Text>
+                                <Text style={styles.ibanValue}>{activeTransferInfo.bankDetails.bankName || activeTransferInfo.bankDetails.bank}</Text>
                             </View>
                             <View style={styles.ibanRow}>
                                 <Text style={styles.ibanLabel}>Beneficiário</Text>
@@ -525,84 +497,79 @@ const OrderPaymentFlow = ({ orderId }) => {
                         </View>
 
                         <View style={styles.transferActions}>
-                            <TouchableOpacity style={styles.shareBtn} onPress={handleShareBankDetails}>
-                                <Text style={styles.shareBtnText}>Copiar / Partilhar Dados</Text>
-                            </TouchableOpacity>
-
-                            <PremiumButton
-                                title={uploadMutation.isPending ? "A enviar..." : "\ud83d\udcce Enviar Comprovativo"}
-                                size="md"
+                            <SecondaryButton title="Copiar / Partilhar Dados" onPress={handleShareBankDetails} />
+                            <PrimaryButton
+                                title={uploadMutation.isPending ? "A enviar..." : "📎 Enviar Comprovativo"}
                                 disabled={uploadMutation.isPending}
                                 onPress={() => handleUploadProof(activeTransferInfo.payment.id)}
-                                style={{ backgroundColor: '#10B981', borderColor: '#059669', flex: 1 }}
+                                style={{ backgroundColor: TOKENS.colors.success }}
                             />
                         </View>
-                    </View>
-                )}
+                    </LedgerCard>
+                </FadeInView>
+            )}
 
-                {/* ── Payment States Feedback ── */}
-                {isPaid && (
+            {/* ── Payment States Feedback ── */}
+            {isPaid && (
+                <FadeInView delay={60}>
                     <View style={styles.paidCard}>
-                        <CheckCircle size={24} color="#10B981" />
-                        <Text style={styles.paidText}>Pagamento confirmado \u2705</Text>
+                        <CheckCircle size={24} color={TOKENS.colors.success} />
+                        <Text style={styles.paidText}>Pagamento confirmado ✅</Text>
                     </View>
-                )}
+                </FadeInView>
+            )}
 
-                {isAwaitingProof && !isPaid && !isTransferPanelActive && (
-                    <View style={styles.waitingCard}>
-                        <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 8 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.waitingTitle}>Aguardando validação da tesouraria</Text>
-                            <Text style={styles.waitingDesc}>O comprovativo foi recebido e está em análise.</Text>
-                        </View>
-                        {/* Permite reenviar caso tenha havido erro / enviar um melhor */}
-                        <TouchableOpacity style={styles.microBtn} onPress={() => handleUploadProof(lastPayment.id)}>
-                            <UploadCloud size={16} color="#F59E0B" />
-                        </TouchableOpacity>
+            {isAwaitingProof && !isPaid && !isTransferPanelActive && (
+                <View style={styles.waitingCard}>
+                    <ActivityIndicator size="small" color={TOKENS.colors.gold} style={{ marginRight: TOKENS.spacing[2] }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.waitingTitle}>Aguardando validação da tesouraria</Text>
+                        <Text style={styles.waitingDesc}>O comprovativo foi recebido e está em análise.</Text>
                     </View>
-                )}
+                    <TouchableOpacity style={styles.microBtn} onPress={() => handleUploadProof(lastPayment.id)}>
+                        <UploadCloud size={16} color={TOKENS.colors.gold} />
+                    </TouchableOpacity>
+                </View>
+            )}
 
-                {isFailed && !isPaid && (
-                    <View style={[styles.waitingCard, { backgroundColor: '#DC262620', borderColor: '#DC262640' }]}>
-                        <AlertCircle size={24} color="#DC2626" style={{ marginRight: 8 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.waitingTitle, { color: '#DC2626' }]}>Pagamento Rejeitado</Text>
-                            <Text style={[styles.waitingDesc, { color: '#DC262680' }]}>Motivo: {lastPayment.metadata?.failureReason || 'Comprovativo inválido.'}</Text>
-                        </View>
+            {isFailed && !isPaid && (
+                <View style={[styles.waitingCard, { backgroundColor: `${TOKENS.colors.danger}20`, borderColor: `${TOKENS.colors.danger}40` }]}>
+                    <AlertCircle size={24} color={TOKENS.colors.danger} style={{ marginRight: TOKENS.spacing[2] }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.waitingTitle, { color: TOKENS.colors.danger }]}>Pagamento Rejeitado</Text>
+                        <Text style={[styles.waitingDesc, { color: `${TOKENS.colors.danger}80` }]}>Motivo: {lastPayment.metadata?.failureReason || 'Comprovativo inválido.'}</Text>
                     </View>
-                )}
+                </View>
+            )}
 
-                {paymentInitiated && !isPaid && (
-                    <View style={styles.waitingCard}>
-                        <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 8 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.waitingTitle}>A iniciar via Multicaixa…</Text>
-                            <Text style={styles.waitingDesc}>Confirme o pagamento na app Multicaixa Express.</Text>
-                        </View>
+            {paymentInitiated && !isPaid && (
+                <View style={styles.waitingCard}>
+                    <ActivityIndicator size="small" color={TOKENS.colors.gold} style={{ marginRight: TOKENS.spacing[2] }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.waitingTitle}>A iniciar via Multicaixa…</Text>
+                        <Text style={styles.waitingDesc}>Confirme o pagamento na app Multicaixa Express.</Text>
                     </View>
-                )}
+                </View>
+            )}
 
-                {/* ── Core Action Buttons ── */}
-                {!isPaid && !isCredit && !isTransferPanelActive && !isAwaitingProof && (
-                    <View style={{ marginBottom: 24, gap: 12 }}>
-                        <PremiumButton
-                            title="\ud83d\udcb3 Pagar Agora (Multicaixa Express)"
-                            size="md"
-                            onPress={handlePayPress}
-                            style={{ backgroundColor: '#DC2626', borderColor: '#B91C1C' }}
-                            disabled={transferMutation.isPending}
-                        />
-                        <PremiumButton
-                            title={transferMutation.isPending ? "A gerar dados..." : "\ud83c\udfe6 Pagar por Transferência Bancária"}
-                            size="md"
-                            onPress={handleBankTransferPress}
-                            style={{ backgroundColor: '#1F2937', borderColor: '#374151' }}
-                            disabled={transferMutation.isPending}
-                        />
-                    </View>
-                )}
+            {/* ── Core Action Buttons ── */}
+            {!isPaid && !isCredit && !isTransferPanelActive && !isAwaitingProof && (
+                <View style={{ marginBottom: TOKENS.spacing[6], gap: TOKENS.spacing[4] }}>
+                    <PrimaryButton
+                        title="💳 Pagar Agora (Multicaixa)"
+                        onPress={handlePayPress}
+                        disabled={transferMutation.isPending}
+                    />
+                    <SecondaryButton
+                        title={transferMutation.isPending ? "A gerar dados..." : "🏦 Pagar por Transferência Bancária"}
+                        onPress={handleBankTransferPress}
+                        disabled={transferMutation.isPending}
+                    />
+                </View>
+            )}
 
-                {/* ── Order Timeline ── */}
+            {/* ── Order Timeline ── */}
+            <FadeInView delay={90}>
                 <Text style={styles.sectionTitle}>Progresso Logístico</Text>
                 <View style={styles.timeline}>
                     {[
@@ -613,174 +580,180 @@ const OrderPaymentFlow = ({ orderId }) => {
                     ].map((step, index, arr) => {
                         const Icon = step.icon;
                         const isLast = index === arr.length - 1;
+                        const isCompleted = step.done;
+
+                        const dotColor = isCompleted ? TOKENS.colors.gold : TOKENS.colors.border;
+                        const iconColor = isCompleted ? TOKENS.colors.textInverse : TOKENS.colors.muted;
+
                         return (
                             <View key={step.id} style={styles.stepContainer}>
                                 <View style={styles.stepLeft}>
-                                    <View style={[styles.iconBox, step.done ? { backgroundColor: Theme.colors.primary } : styles.iconBoxFuture]}>
-                                        <Icon size={18} color={step.done ? '#FFFFFF' : '#6B7280'} />
+                                    <View style={[styles.iconBox, isCompleted ? { backgroundColor: TOKENS.colors.gold } : { backgroundColor: TOKENS.colors.surface2 }]}>
+                                        <Icon size={18} color={iconColor} />
                                     </View>
-                                    {!isLast && <View style={[styles.timelineLine, step.done ? { backgroundColor: Theme.colors.primary } : { backgroundColor: '#2A2A2A' }]} />}
+                                    {!isLast && <View style={[styles.timelineLine, { backgroundColor: isCompleted ? TOKENS.colors.gold : TOKENS.colors.border }]} />}
                                 </View>
                                 <View style={styles.stepRight}>
-                                    <Text style={[styles.stepTitle, step.done ? { color: '#FFFFFF' } : { color: '#6B7280' }]}>{step.title}</Text>
+                                    <Text style={[styles.stepTitle, isCompleted ? { color: TOKENS.colors.text } : { color: TOKENS.colors.muted }]}>{step.title}</Text>
                                 </View>
                             </View>
                         );
                     })}
                 </View>
-            </ScrollView>
+            </FadeInView>
 
             {/* ── Phone Number Modal for GPO ── */}
             <Modal visible={payModalVisible} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalCard}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Multicaixa Express</Text>
-                            <TouchableOpacity onPress={() => setPayModalVisible(false)}>
-                                <X size={22} color="#9CA3AF" />
+                            <Text style={textStyles.h2}>Multicaixa Express</Text>
+                            <TouchableOpacity onPress={() => setPayModalVisible(false)} hitSlop={10}>
+                                <X size={24} color={TOKENS.colors.muted} />
                             </TouchableOpacity>
                         </View>
 
-                        <Text style={styles.modalLabel}>Número de telefone</Text>
+                        <Text style={[textStyles.bodyMedium, { color: TOKENS.colors.muted, marginBottom: TOKENS.spacing[2] }]}>Número de telefone</Text>
                         <TextInput
                             style={styles.modalInput}
                             value={phoneNumber}
                             onChangeText={setPhoneNumber}
                             placeholder="244XXXXXXXXX"
-                            placeholderTextColor="#6B7280"
+                            placeholderTextColor={TOKENS.colors.textTertiary}
                             keyboardType="phone-pad"
                             maxLength={12}
                         />
-                        <Text style={styles.modalHint}>Formato: 244 seguido de 9 dígitos</Text>
+                        <Text style={[textStyles.small, { color: TOKENS.colors.textTertiary, marginTop: TOKENS.spacing[2] }]}>Formato: 244 seguido de 9 dígitos</Text>
 
                         <View style={styles.modalAmountRow}>
-                            <Text style={styles.modalAmountLabel}>Valor a pagar:</Text>
-                            <Text style={styles.modalAmountValue}>{formatKz(order?.total || 0)}</Text>
+                            <Text style={[textStyles.bodyMedium, { color: TOKENS.colors.muted }]}>Valor a pagar:</Text>
+                            <Text style={Theme.typography.priceLarge}>{formatKz(order?.total || 0)}</Text>
                         </View>
 
-                        <TouchableOpacity
-                            style={[styles.modalPayBtn, gpoMutation.isPending && { opacity: 0.6 }]}
+                        <PrimaryButton
+                            title="Confirmar Pagamento"
                             onPress={handleConfirmPay}
+                            loading={gpoMutation.isPending}
                             disabled={gpoMutation.isPending}
-                        >
-                            {gpoMutation.isPending ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.modalPayBtnText}>Confirmar Pagamento</Text>
-                            )}
-                        </TouchableOpacity>
+                            style={{ marginTop: TOKENS.spacing[6] }}
+                        />
                     </View>
                 </View>
             </Modal>
-        </View>
+        </Screen>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0F0F0F' },
-    header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 56, paddingHorizontal: 20, paddingBottom: 16,
-        backgroundColor: '#1A1A1A', borderBottomWidth: 1, borderBottomColor: '#2A2A2A',
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: TOKENS.spacing[4],
     },
-    backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#2A2A2A', justifyContent: 'center', alignItems: 'center' },
-    refreshBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#1F2937', justifyContent: 'center', alignItems: 'center' },
-    title: { ...T.h3, color: Theme.colors.white },
-    content: { padding: 20 },
-
-    metaCard: {
-        backgroundColor: '#1A1A1A', padding: 20, borderRadius: 16,
-        marginBottom: 24, borderWidth: 1, borderColor: '#2A2A2A'
+    cardDateText: {
+        ...textStyles.caption,
+        textTransform: 'none',
     },
-    metaTitle: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: '#FFFFFF', marginBottom: 12 },
-    metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-start' },
-    metaLabel: { fontFamily: 'Poppins_400Regular', fontSize: 14, color: '#9CA3AF', flex: 1 },
-    metaValue: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: '#FFFFFF', flex: 1, textAlign: 'right' },
-    metaPrice: { fontFamily: 'Poppins_700Bold', fontSize: 22, color: '#DC2626' },
+    cardBody: {
+        marginBottom: TOKENS.spacing[4],
+    },
+    cardTitle: {
+        ...textStyles.h3,
+        marginBottom: TOKENS.spacing[1],
+    },
+    cardSubtitle: {
+        ...textStyles.body,
+        color: TOKENS.colors.muted,
+    },
+    cardFooter: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: TOKENS.spacing[4],
+        borderTopWidth: 1,
+        borderTopColor: TOKENS.colors.border,
+    },
+    cardPrice: {
+        ...textStyles.h2,
+        color: TOKENS.colors.gold,
+    },
+    kpiLabel: {
+        ...textStyles.body,
+        color: TOKENS.colors.muted,
+    },
+    kpiValueSmall: {
+        ...textStyles.body,
+        fontFamily: 'Fraunces_600SemiBold',
+    },
+    kpiDivider: {
+        height: 1,
+        backgroundColor: TOKENS.colors.border,
+        marginVertical: TOKENS.spacing[3],
+    },
 
-    sectionTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: '#FFFFFF', marginBottom: 16 },
+    sectionTitle: { ...textStyles.h3, marginBottom: TOKENS.spacing[4] },
 
-    pulseBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', padding: 12, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: '#F59E0B' },
-    pulseText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#D97706' },
+    pulseBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: `${TOKENS.colors.warning}15`, padding: TOKENS.spacing[3], borderRadius: TOKENS.radius.soft, marginBottom: TOKENS.spacing[6], borderWidth: 1, borderColor: TOKENS.colors.warning },
+    pulseText: { ...textStyles.bodyMedium, color: TOKENS.colors.warning },
 
-    timeline: { paddingLeft: 8 },
+    timeline: { paddingLeft: TOKENS.spacing[2], marginBottom: TOKENS.spacing[6] },
     stepContainer: { flexDirection: 'row', minHeight: 80 },
-    stepLeft: { alignItems: 'center', width: 40, marginRight: 16 },
+    stepLeft: { alignItems: 'center', width: 40, marginRight: TOKENS.spacing[4] },
     iconBox: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    iconBoxFuture: { backgroundColor: '#1F2937' },
-    timelineLine: { width: 2, flex: 1, marginVertical: 4 },
-    stepRight: { flex: 1, paddingTop: 8 },
-    stepTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 15 },
-    stepDesc: { fontFamily: 'Poppins_400Regular', fontSize: 13, marginTop: 4, lineHeight: 18 },
+    timelineLine: { width: 2, flex: 1, marginVertical: TOKENS.spacing[1] },
+    stepRight: { flex: 1, paddingTop: TOKENS.spacing[2] },
+    stepTitle: { ...textStyles.bodyBold },
+    stepDesc: { ...textStyles.small, marginTop: TOKENS.spacing[1], lineHeight: 20 },
 
-    financeCard: {
-        backgroundColor: '#1A1A1A', padding: 16, borderRadius: 16,
-        marginBottom: 16, borderWidth: 1,
-    },
-    financeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-    financeTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 14 },
-    financeBadge: { alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginBottom: 8 },
-    financeBadgeText: { fontFamily: 'Poppins_700Bold', fontSize: 13 },
-    financeMode: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+    qTimeline: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: TOKENS.spacing[4] },
+    qTimelineStepContainer: { alignItems: 'center', flex: 1 },
+    qTimelineDotContainer: { flexDirection: 'row', alignItems: 'center', width: '100%', height: 28 },
+    qTimelineOuterDot: { justifyContent: 'center', alignItems: 'center', zIndex: 1, position: 'absolute', left: '50%', transform: [{ translateX: -12 }] },
+    qTimelineInnerDot: {},
+    qTimelineLine: { height: 1, flex: 1, width: '100%', position: 'absolute', left: '50%', top: 13, zIndex: 0 },
+    qTimelineLabel: { ...textStyles.caption, fontSize: 9, marginTop: TOKENS.spacing[1], textAlign: 'center', textTransform: 'none' },
 
     creditCard: {
-        backgroundColor: '#1E3A8A20', padding: 16, borderRadius: 16, marginBottom: 24,
-        borderWidth: 1, borderColor: '#3B82F640',
+        backgroundColor: `${TOKENS.colors.gold}15`, padding: TOKENS.spacing[4], borderRadius: TOKENS.radius.card, marginBottom: TOKENS.spacing[6],
+        borderWidth: 1, borderColor: `${TOKENS.colors.gold}40`,
     },
-    creditTitle: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: '#3B82F6', marginBottom: 4 },
-    creditDesc: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: '#93C5FD', lineHeight: 18 },
+    creditTitle: { ...textStyles.h3, color: TOKENS.colors.gold, marginBottom: TOKENS.spacing[1] },
+    creditDesc: { ...textStyles.small, color: TOKENS.colors.gold, opacity: 0.8 },
 
-    transferPanel: {
-        backgroundColor: '#111827', padding: 20, borderRadius: 16, marginBottom: 24,
-        borderWidth: 1, borderColor: '#374151',
-    },
-    transferTitle: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: '#F3F4F6', marginBottom: 4 },
-    transferSubtitle: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: '#9CA3AF', marginBottom: 16 },
-    ibanBox: { backgroundColor: '#1F2937', padding: 16, borderRadius: 12, marginBottom: 16 },
-    ibanRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-    ibanLabel: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: '#9CA3AF' },
-    ibanValue: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: '#F9FAFB' },
-    transferActions: { gap: 12 },
-    shareBtn: { paddingVertical: 12, alignItems: 'center', backgroundColor: '#374151', borderRadius: 12 },
-    shareBtnText: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: '#D1D5DB' },
+    ibanBox: { backgroundColor: TOKENS.colors.surface2, padding: TOKENS.spacing[4], borderRadius: TOKENS.radius.soft, marginBottom: TOKENS.spacing[4] },
+    ibanRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: TOKENS.spacing[2] },
+    ibanLabel: { ...textStyles.small, color: TOKENS.colors.muted },
+    ibanValue: { ...textStyles.bodyBold, color: TOKENS.colors.textInverse, fontFamily: 'monospace' }, // Uses system monospace for numbers
+    transferActions: { gap: TOKENS.spacing[3] },
 
     waitingCard: {
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C720',
-        padding: 14, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: '#F59E0B40',
+        flexDirection: 'row', alignItems: 'center', backgroundColor: `${TOKENS.colors.gold}15`,
+        padding: TOKENS.spacing[4], borderRadius: TOKENS.radius.soft, marginBottom: TOKENS.spacing[4], borderWidth: 1, borderColor: `${TOKENS.colors.gold}40`,
     },
-    waitingTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: '#F59E0B' },
-    waitingDesc: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: '#D9770680', marginTop: 2 },
-    microBtn: { padding: 8, backgroundColor: '#F59E0B20', borderRadius: 8 },
+    waitingTitle: { ...textStyles.bodyBold, color: TOKENS.colors.gold },
+    waitingDesc: { ...textStyles.small, color: TOKENS.colors.gold, opacity: 0.8, marginTop: 2 },
+    microBtn: { padding: TOKENS.spacing[2], backgroundColor: `${TOKENS.colors.gold}20`, borderRadius: TOKENS.radius.soft },
 
     paidCard: {
-        flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#10B98120',
-        padding: 16, borderRadius: 14, marginBottom: 24, borderWidth: 1, borderColor: '#10B98140',
+        flexDirection: 'row', alignItems: 'center', gap: TOKENS.spacing[2], backgroundColor: `${TOKENS.colors.success}15`,
+        padding: TOKENS.spacing[4], borderRadius: TOKENS.radius.soft, marginBottom: TOKENS.spacing[6], borderWidth: 1, borderColor: `${TOKENS.colors.success}40`,
     },
-    paidText: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: '#10B981' },
+    paidText: { ...textStyles.bodyBold, color: TOKENS.colors.success },
 
-    modalOverlay: { flex: 1, backgroundColor: '#00000090', justifyContent: 'flex-end' },
+    modalOverlay: { flex: 1, backgroundColor: '#000000B3', justifyContent: 'flex-end' },
     modalCard: {
-        backgroundColor: '#1A1A1A', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-        paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40,
+        backgroundColor: TOKENS.colors.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+        paddingHorizontal: TOKENS.spacing[6], paddingTop: TOKENS.spacing[6], paddingBottom: TOKENS.spacing[10],
     },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-    modalTitle: { fontFamily: 'Poppins_700Bold', fontSize: 20, color: '#FFFFFF' },
-    modalLabel: { fontFamily: 'Poppins_500Medium', fontSize: 13, color: '#9CA3AF', marginBottom: 8 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: TOKENS.spacing[6] },
     modalInput: {
-        backgroundColor: '#0F0F0F', color: '#FFFFFF', fontFamily: 'Poppins_500Medium',
-        fontSize: 18, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14,
-        borderWidth: 1, borderColor: '#2A2A2A', letterSpacing: 1,
+        backgroundColor: TOKENS.colors.background, color: TOKENS.colors.text, fontFamily: 'monospace',
+        fontSize: 20, paddingHorizontal: TOKENS.spacing[4], paddingVertical: TOKENS.spacing[4], borderRadius: TOKENS.radius.soft,
+        borderWidth: 1, borderColor: TOKENS.colors.border, letterSpacing: 2,
     },
-    modalHint: { fontFamily: 'Poppins_400Regular', fontSize: 11, color: '#6B7280', marginTop: 6 },
     modalAmountRow: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        backgroundColor: '#0F0F0F', padding: 14, borderRadius: 14, marginTop: 20,
+        backgroundColor: TOKENS.colors.background, padding: TOKENS.spacing[4], borderRadius: TOKENS.radius.soft, marginTop: TOKENS.spacing[5],
     },
-    modalAmountLabel: { fontFamily: 'Poppins_500Medium', fontSize: 14, color: '#9CA3AF' },
-    modalAmountValue: { fontFamily: 'Poppins_700Bold', fontSize: 20, color: '#DC2626' },
-    modalPayBtn: {
-        backgroundColor: '#DC2626', paddingVertical: 16, borderRadius: 16,
-        alignItems: 'center', marginTop: 20,
-    },
-    modalPayBtnText: { fontFamily: 'Poppins_700Bold', fontSize: 16, color: '#FFFFFF' },
 });

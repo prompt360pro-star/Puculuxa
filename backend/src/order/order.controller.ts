@@ -8,6 +8,8 @@ import {
   UseGuards,
   Query,
   Req,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { OrderService, OrderStatus } from './order.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -49,8 +51,16 @@ export class OrderController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.orderService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req: any) {
+    const order = await this.orderService.findOne(id);
+    if (!order) throw new NotFoundException('Pedido não encontrado');
+
+    const userId = req.user?.id || req.user?.sub;
+    const userRole = req.user?.role;
+    if (userRole === 'CUSTOMER' && order.userId !== userId) {
+      throw new ForbiddenException('Não tem permissão para ver este pedido');
+    }
+    return order;
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -1,77 +1,81 @@
 /**
- * Tipografia Estruturada — Puculuxa
+ * Tipografia Estruturada — Puculuxa Premium Pass
  * Hierarquia funcional clara: cada nível tem propósito.
  */
 
-export const T = {
-    brand: {
-        fontFamily: 'Pacifico_400Regular',
-        fontSize: 32,
-        lineHeight: 40,
-        color: '#FFFFFF',
-    },
+import { TOKENS } from './tokens';
+
+export const textStyles = {
     h1: {
-        fontFamily: 'Merriweather_700Bold',
-        fontSize: 28,
-        lineHeight: 36,
-        letterSpacing: -0.3,
-        color: '#1A1209',
+        fontFamily: 'Fraunces_700Bold',
+        fontSize: TOKENS.typographyScale.h1.fontSize,
+        lineHeight: TOKENS.typographyScale.h1.lineHeight,
+        letterSpacing: TOKENS.typographyScale.h1.letterSpacing,
+        color: TOKENS.colors.text,
     },
     h2: {
-        fontFamily: 'Merriweather_700Bold',
-        fontSize: 22,
-        lineHeight: 30,
-        letterSpacing: -0.2,
-        color: '#1A1209',
+        fontFamily: 'Fraunces_600SemiBold',
+        fontSize: TOKENS.typographyScale.h2.fontSize,
+        lineHeight: TOKENS.typographyScale.h2.lineHeight,
+        letterSpacing: TOKENS.typographyScale.h2.letterSpacing,
+        color: TOKENS.colors.text,
     },
     h3: {
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 18,
-        lineHeight: 26,
-        color: '#3D3020',
+        fontFamily: 'Fraunces_600SemiBold',
+        fontSize: TOKENS.typographyScale.h3.fontSize,
+        lineHeight: TOKENS.typographyScale.h3.lineHeight,
+        letterSpacing: TOKENS.typographyScale.h3.letterSpacing,
+        color: TOKENS.colors.text,
     },
     body: {
-        fontFamily: 'Poppins_400Regular',
-        fontSize: 15,
-        lineHeight: 24,
-        color: '#3D3020',
+        fontFamily: 'Inter_400Regular',
+        fontSize: TOKENS.typographyScale.body.fontSize,
+        lineHeight: TOKENS.typographyScale.body.lineHeight,
+        letterSpacing: TOKENS.typographyScale.body.letterSpacing,
+        color: TOKENS.colors.text,
     },
-    bodySmall: {
-        fontFamily: 'Poppins_400Regular',
-        fontSize: 13,
-        lineHeight: 20,
-        color: '#8D8174',
+    bodyMedium: {
+        fontFamily: 'Inter_500Medium',
+        fontSize: TOKENS.typographyScale.body.fontSize,
+        lineHeight: TOKENS.typographyScale.body.lineHeight,
+        letterSpacing: TOKENS.typographyScale.body.letterSpacing,
+        color: TOKENS.colors.text,
     },
-    label: {
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 11,
-        lineHeight: 16,
-        letterSpacing: 0.8,
+    bodyBold: {
+        fontFamily: 'Inter_700Bold',
+        fontSize: TOKENS.typographyScale.body.fontSize,
+        lineHeight: TOKENS.typographyScale.body.lineHeight,
+        letterSpacing: TOKENS.typographyScale.body.letterSpacing,
+        color: TOKENS.colors.text,
+    },
+    small: {
+        fontFamily: 'Inter_400Regular',
+        fontSize: TOKENS.typographyScale.small.fontSize,
+        lineHeight: TOKENS.typographyScale.small.lineHeight,
+        letterSpacing: TOKENS.typographyScale.small.letterSpacing,
+        color: TOKENS.colors.muted,
+    },
+    caption: {
+        fontFamily: 'Inter_500Medium',
+        fontSize: TOKENS.typographyScale.caption.fontSize,
+        lineHeight: TOKENS.typographyScale.caption.lineHeight,
+        letterSpacing: TOKENS.typographyScale.caption.letterSpacing,
+        color: TOKENS.colors.muted,
         textTransform: 'uppercase',
-        color: '#8D8174',
     },
-    price: {
-        fontFamily: 'Merriweather_700Bold',
-        fontSize: 20,
-        lineHeight: 26,
-        color: '#FF8C42',
-    },
-    priceLarge: {
-        fontFamily: 'Merriweather_700Bold',
-        fontSize: 34,
-        lineHeight: 42,
-        color: '#FF8C42',
-    },
-    button: {
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 15,
-        lineHeight: 20,
-        letterSpacing: 0.3,
-    },
-    buttonSmall: {
-        fontFamily: 'Poppins_600SemiBold',
-        fontSize: 13,
-        lineHeight: 18,
-        letterSpacing: 0.3,
-    },
+};
+
+// Aliases para legacy compatibility
+export const T = {
+    brand: textStyles.h1,
+    h1: textStyles.h1,
+    h2: textStyles.h2,
+    h3: textStyles.h3,
+    body: textStyles.body,
+    bodySmall: textStyles.small,
+    label: textStyles.caption,
+    price: { ...textStyles.h2, color: TOKENS.colors.gold },
+    priceLarge: { ...textStyles.h1, color: TOKENS.colors.gold },
+    button: { ...textStyles.bodyMedium, color: TOKENS.colors.textInverse },
+    buttonSmall: { ...textStyles.small, color: TOKENS.colors.textInverse, fontFamily: 'Inter_500Medium' },
 };

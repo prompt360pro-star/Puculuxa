@@ -20,56 +20,70 @@ export class EventReminderService {
     // ─── Cron: corre todos os dias às 08:00 AM ───
     @Cron(CronExpression.EVERY_DAY_AT_8AM)
     async processReminders() {
-        const now = new Date();
-        this.logger.log(`[EventReminder] Processing reminders at ${now.toISOString()}`);
+        try {
+            const now = new Date();
+            this.logger.log(`[EventReminder] Processing reminders at ${now.toISOString()}`);
 
-        const dueReminders = await this.prisma.eventReminder.findMany({
-            where: {
-                status: { in: ['PENDING', 'SENT_30D', 'SENT_7D'] },
-                nextReminder: { lte: now },
-            },
-            include: { user: true },
-        });
+            const dueReminders = await this.prisma.eventReminder.findMany({
+                where: {
+                    status: { in: ['PENDING', 'SENT_30D', 'SENT_7D'] },
+                    nextReminder: { lte: now },
+                },
+                include: { user: true },
+            });
 
-        this.logger.log(`[EventReminder] Found ${dueReminders.length} reminders to process`);
+            this.logger.log(`[EventReminder] Found ${dueReminders.length} reminders to process`);
 
-        for (const reminder of dueReminders) {
-            await this.sendReminder(reminder);
+            for (const reminder of dueReminders) {
+                await this.sendReminder(reminder);
+            }
+        } catch (error: any) {
+            this.logger.error(
+                `[Cron] EventReminderService.processReminders failed: ${error?.message}`,
+                error?.stack,
+            );
         }
     }
 
     // ─── Cron: auto-expirar orçamentos após 7 dias sem resposta ───
     @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
     async expireStaleQuotations() {
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        try {
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-        const stale = await this.prisma.quotation.findMany({
-            where: {
-                status: { in: ['SUBMITTED', 'PROPOSAL_SENT'] },
-                slaDeadline: { lte: new Date() },
-                updatedAt: { lte: sevenDaysAgo },
-                deletedAt: null,
-            },
-        });
+            const stale = await this.prisma.quotation.findMany({
+                where: {
+                    status: { in: ['SUBMITTED', 'PROPOSAL_SENT'] },
+                    slaDeadline: { lte: new Date() },
+                    updatedAt: { lte: sevenDaysAgo },
+                    deletedAt: null,
+                },
+            });
 
-        this.logger.log(`[Expiry] Found ${stale.length} stale quotations to expire`);
+            this.logger.log(`[Expiry] Found ${stale.length} stale quotations to expire`);
 
-        for (const q of stale) {
-            await this.prisma.$transaction([
-                this.prisma.quotation.update({
-                    where: { id: q.id },
-                    data: { status: 'EXPIRED', updatedAt: new Date() },
-                }),
-                this.prisma.statusAuditLog.create({
-                    data: {
-                        quotationId: q.id,
-                        fromStatus: q.status,
-                        toStatus: 'EXPIRED',
-                        changedBy: 'SYSTEM',
-                        reason: 'SLA ultrapassado — expirado automaticamente após 7 dias.',
-                    },
-                }),
-            ]);
+            for (const q of stale) {
+                await this.prisma.$transaction([
+                    this.prisma.quotation.update({
+                        where: { id: q.id },
+                        data: { status: 'EXPIRED', updatedAt: new Date() },
+                    }),
+                    this.prisma.statusAuditLog.create({
+                        data: {
+                            quotationId: q.id,
+                            fromStatus: q.status,
+                            toStatus: 'EXPIRED',
+                            changedBy: 'SYSTEM',
+                            reason: 'SLA ultrapassado — expirado automaticamente após 7 dias.',
+                        },
+                    }),
+                ]);
+            }
+        } catch (error: any) {
+            this.logger.error(
+                `[Cron] EventReminderService.expireStaleQuotations failed: ${error?.message}`,
+                error?.stack,
+            );
         }
     }
 

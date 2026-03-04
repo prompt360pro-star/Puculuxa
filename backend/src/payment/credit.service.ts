@@ -108,23 +108,31 @@ export class CreditService {
     // ─── c) Cron: detect OVERDUE orders daily at 07:30 ───
     @Cron('30 7 * * *')
     async refreshOverdueStatuses(): Promise<number> {
-        const now = new Date();
+        try {
+            const now = new Date();
 
-        const result = await this.prisma.order.updateMany({
-            where: {
-                financialStatus: 'IN_CREDIT',
-                creditDueDate: { lt: now },
-            },
-            data: { financialStatus: 'OVERDUE' },
-        });
+            const result = await this.prisma.order.updateMany({
+                where: {
+                    financialStatus: 'IN_CREDIT',
+                    creditDueDate: { lt: now },
+                },
+                data: { financialStatus: 'OVERDUE' },
+            });
 
-        if (result.count > 0) {
-            this.logger.warn(`[Credit] OVERDUE scan: ${result.count} order(s) marked OVERDUE`);
-        } else {
-            this.logger.log('[Credit] OVERDUE scan: no new overdues today');
+            if (result.count > 0) {
+                this.logger.warn(`[Credit] OVERDUE scan: ${result.count} order(s) marked OVERDUE`);
+            } else {
+                this.logger.log('[Credit] OVERDUE scan: no new overdues today');
+            }
+
+            return result.count;
+        } catch (error: any) {
+            this.logger.error(
+                `[Cron] CreditService.refreshOverdueStatuses failed: ${error?.message}`,
+                error?.stack,
+            );
+            return 0;
         }
-
-        return result.count;
     }
 
     // ─── d) Get overdue orders (for admin list, paginated) ───
