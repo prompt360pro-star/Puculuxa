@@ -22,7 +22,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import type { Request } from 'express';
 import { IsString, IsNotEmpty, IsOptional, IsBoolean } from 'class-validator';
+import { PaymentStatus } from '@prisma/client';
 import { PaymentService } from './payment.service';
+
+export interface AuthUser {
+    id?: string;
+    sub?: string;
+    role?: string;
+    [key: string]: unknown;
+}
+
+export interface AuthRequest extends Request {
+    user?: AuthUser;
+}
 import { InvoiceService } from './invoice.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -59,9 +71,9 @@ export class PaymentController {
     // ─── a0) Resumo Financeiro da Encomenda ───
     @UseGuards(JwtAuthGuard)
     @Get('order/:orderId/summary')
-    async getOrderSummary(@Param('orderId') orderId: string, @Req() req: Request) {
-        const userId = (req as any).user?.id || (req as any).user?.sub;
-        const userRole = (req as any).user?.role;
+    async getOrderSummary(@Param('orderId') orderId: string, @Req() req: AuthRequest) {
+        const userId = req.user?.id || req.user?.sub;
+        const userRole = req.user?.role;
 
         const order = await this.prisma.order.findUnique({ where: { id: orderId } });
         if (!order) throw new NotFoundException(`Order não encontrada`);
@@ -77,9 +89,9 @@ export class PaymentController {
     @UseGuards(JwtAuthGuard)
     @Post('initiate-gpo')
     @UsePipes(new ValidationPipe({ whitelist: true }))
-    async initiateGpo(@Body() dto: InitiateGpoDto, @Req() req: Request) {
-        const userId = (req as any).user?.id || (req as any).user?.sub;
-        const userRole = (req as any).user?.role;
+    async initiateGpo(@Body() dto: InitiateGpoDto, @Req() req: AuthRequest) {
+        const userId = req.user?.id || req.user?.sub;
+        const userRole = req.user?.role;
 
         const order = await this.prisma.order.findUnique({ where: { id: dto.orderId } });
         if (!order) throw new NotFoundException(`Order ${dto.orderId} não encontrada`);
@@ -105,9 +117,9 @@ export class PaymentController {
     @UseGuards(JwtAuthGuard)
     @Post('bank-transfer')
     @UsePipes(new ValidationPipe({ whitelist: true }))
-    async initiateBankTransfer(@Body() dto: BankTransferDto, @Req() req: Request) {
-        const userId = (req as any).user?.id || (req as any).user?.sub;
-        const userRole = (req as any).user?.role;
+    async initiateBankTransfer(@Body() dto: BankTransferDto, @Req() req: AuthRequest) {
+        const userId = req.user?.id || req.user?.sub;
+        const userRole = req.user?.role;
 
         const order = await this.prisma.order.findUnique({ where: { id: dto.orderId } });
         if (!order) throw new NotFoundException(`Order ${dto.orderId} não encontrada`);
@@ -151,13 +163,13 @@ export class PaymentController {
     async uploadProof(
         @Param('id') paymentId: string,
         @UploadedFile() file: Express.Multer.File & { secure_url?: string; path?: string },
-        @Req() req: Request,
+        @Req() req: AuthRequest,
     ) {
         const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
         if (!payment) throw new NotFoundException(`Payment ${paymentId} não encontrado`);
 
-        const userId = (req as any).user?.id || (req as any).user?.sub;
-        const userRole = (req as any).user?.role;
+        const userId = req.user?.id || req.user?.sub;
+        const userRole = req.user?.role;
 
         // Verificar ownership via a order
         if (userRole === 'CUSTOMER') {
@@ -169,11 +181,11 @@ export class PaymentController {
 
         if (!file) throw new BadRequestException('Ficheiro de comprovativo obrigatório');
 
-        const proofUrl = file.path || file.secure_url || (file as any).filename || '';
+        const proofUrl = file.path || file.secure_url || (file as Express.Multer.File & { filename?: string }).filename || '';
 
         await this.prisma.payment.update({
             where: { id: paymentId },
-            data: { proofUrl, status: 'AWAITING_PROOF' as any },
+            data: { proofUrl, status: PaymentStatus.AWAITING_PROOF },
         });
 
         // Notificar admin via WebSocket
@@ -214,9 +226,9 @@ export class PaymentController {
     // ─── e) Listar pagamentos de uma order ───
     @UseGuards(JwtAuthGuard)
     @Get('order/:orderId')
-    async getOrderPayments(@Param('orderId') orderId: string, @Req() req: Request) {
-        const userId = (req as any).user?.id || (req as any).user?.sub;
-        const userRole = (req as any).user?.role;
+    async getOrderPayments(@Param('orderId') orderId: string, @Req() req: AuthRequest) {
+        const userId = req.user?.id || req.user?.sub;
+        const userRole = req.user?.role;
 
         if (userRole === 'CUSTOMER') {
             const order = await this.prisma.order.findUnique({ where: { id: orderId } });
@@ -248,10 +260,10 @@ export class PaymentController {
 
         const [total, payments] = await Promise.all([
             this.prisma.payment.count({
-                where: { status: 'AWAITING_PROOF' as any },
+                where: { status: PaymentStatus.AWAITING_PROOF },
             }),
             this.prisma.payment.findMany({
-                where: { status: 'AWAITING_PROOF' as any },
+                where: { status: PaymentStatus.AWAITING_PROOF },
                 include: {
                     order: {
                         select: {
@@ -274,7 +286,7 @@ export class PaymentController {
             })
         ]);
 
-        const data = payments.map((p: any) => ({
+        const data = payments.map((p) => ({
             id: p.id,
             orderId: p.orderId,
             amount: p.amount,

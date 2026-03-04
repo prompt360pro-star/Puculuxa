@@ -6,7 +6,6 @@ import {
     Body,
     Query,
     UseGuards,
-    ParseIntPipe,
 } from '@nestjs/common';
 import { PayoutService, CreateDraftPayoutDto, ReportProviderPayoutDto, MarkPayoutAsPaidDto } from './payout.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

@@ -10,7 +10,6 @@ describe('Payment E2E (Phase 10E)', () => {
     let app: INestApplication;
     let prisma: PrismaService;
     let authToken: string;
-    let customerId: string;
     let orderIdBank: string;
     let orderIdGpo: string;
     let providerRefGpo: string;
@@ -53,10 +52,9 @@ describe('Payment E2E (Phase 10E)', () => {
                 phone: '923000000',
             },
         });
-        customerId = customer.id;
 
         // Gerar um JWT simples fingindo ser authService
-        const resAuth = await request(app.getHttpServer())
+        await request(app.getHttpServer())
             .post('/auth/login')
             .send({ email: 'e2e-payment@puculuxa.com', password: 'hash' });
 

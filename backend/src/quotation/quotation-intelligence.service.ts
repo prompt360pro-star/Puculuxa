@@ -4,7 +4,6 @@ import {
     calculateComplexity,
     calculateSmartPrice,
     EVENT_SUGGESTIONS,
-    COMPLEMENTS,
     EVENT_LABELS,
     formatKz,
 } from '@puculuxa/shared';
@@ -43,7 +42,7 @@ export class QuotationIntelligenceService {
     constructor(private prisma: PrismaService) { }
 
     // ─── Suggest Products by Event Type ───
-    async suggestProducts(eventType: string, guestCount: number): Promise<SuggestedProduct[]> {
+    async suggestProducts(eventType: string): Promise<SuggestedProduct[]> {
         const suggestedIds = EVENT_SUGGESTIONS[eventType] || [];
         const products = await this.prisma.product.findMany({
             where: { deletedAt: null },
@@ -143,7 +142,7 @@ export class QuotationIntelligenceService {
         if (!quotation) throw new Error('Quotation not found');
 
         const clientProfile = await this.getClientProfile(quotation.customerId);
-        const suggestedProducts = await this.suggestProducts(quotation.eventType, quotation.guestCount);
+        const suggestedProducts = await this.suggestProducts(quotation.eventType);
         const feasibility = await this.checkFeasibility(quotation.eventDate);
 
         const complexityScore = calculateComplexity({

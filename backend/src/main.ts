@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
 import * as bodyParser from 'body-parser';
+import type { IncomingMessage } from 'http';
 
 import helmet from 'helmet';
 import { initSentry } from './common/sentry.config';
@@ -48,7 +49,7 @@ async function bootstrap() {
 
   // Capture raw body for webhook signature verification
   app.use(bodyParser.json({
-    verify: (req: any, _res, buf) => {
+    verify: (req: IncomingMessage & { rawBody?: Buffer }, _res, buf) => {
       req.rawBody = buf;
     }
   }));

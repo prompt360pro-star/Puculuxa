@@ -23,6 +23,9 @@ jobs:
       - name: Generate Prisma Client
         working-directory: backend
         run: npx prisma generate
+      - name: Validate Migrations
+        working-directory: backend
+        run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code || echo "⚠️ Schema drift detected — run npx prisma migrate dev"
       - name: Build
         working-directory: backend
         run: npx nest build

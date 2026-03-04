@@ -1,3 +1,4 @@
+import { PaymentStatus, PaymentMethod, PayoutStatus } from '@prisma/client';
 import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { ExportService } from './export.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -12,13 +13,18 @@ export class ExportController {
 
     @Get('payments.csv')
     async exportPayments(
+        @Res() res: Response,
         @Query('from') from: string,
         @Query('to') to: string,
-        @Query('status') status: string,
-        @Query('method') method: string,
-        @Res() res: Response,
+        @Query('status') status?: string,
+        @Query('method') method?: string,
     ) {
-        const csv = await this.exportService.exportPayments(from, to, status, method);
+        const csv = await this.exportService.exportPayments(
+            from,
+            to,
+            status as PaymentStatus,
+            method as PaymentMethod
+        );
 
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader(
@@ -47,12 +53,12 @@ export class ExportController {
 
     @Get('payouts.csv')
     async exportPayouts(
+        @Res() res: Response,
         @Query('from') from: string,
         @Query('to') to: string,
-        @Query('status') status: string,
-        @Res() res: Response,
+        @Query('status') status?: string,
     ) {
-        const csv = await this.exportService.exportPayouts(from, to, status);
+        const csv = await this.exportService.exportPayouts(from, to, status as PayoutStatus);
 
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader(

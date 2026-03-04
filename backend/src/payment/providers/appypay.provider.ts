@@ -77,9 +77,10 @@ export class AppyPayProvider {
 
             this.logger.log('[AppyPay] Access token acquired and cached');
             return this.tokenCache.token;
-        } catch (error: any) {
-            this.logger.error(`[AppyPay] Failed to get access token: ${error.message}`);
-            throw error;
+        } catch (error: unknown) {
+            const err = error as any;
+            this.logger.error(`[AppyPay] Failed to get access token: ${err.message}`);
+            throw err;
         }
     }
 
@@ -126,9 +127,10 @@ export class AppyPayProvider {
             const data = await response.json() as AppyPayChargeResponse;
             this.logger.log(`[AppyPay] GPO charge created: ${data.id} (ref: ${data.reference})`);
             return data;
-        } catch (error: any) {
-            this.logger.error(`[AppyPay] createGpoCharge error: ${error.message}`);
-            throw error;
+        } catch (error: unknown) {
+            const err = error as any;
+            this.logger.error(`[AppyPay] createGpoCharge error: ${err.message}`);
+            throw err;
         }
     }
 
@@ -152,9 +154,10 @@ export class AppyPayProvider {
             }
 
             return await response.json() as AppyPayChargeResponse;
-        } catch (error: any) {
-            this.logger.error(`[AppyPay] getChargeStatus error: ${error.message}`);
-            throw error;
+        } catch (error: unknown) {
+            const err = error as any;
+            this.logger.error(`[AppyPay] getChargeStatus error: ${err.message}`);
+            throw err;
         }
     }
 }

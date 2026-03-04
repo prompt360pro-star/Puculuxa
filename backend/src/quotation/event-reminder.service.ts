@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventReminder, User } from '@prisma/client';
 
 /**
  * EventReminder Service — Motor de Recompra v3.1
@@ -73,7 +74,7 @@ export class EventReminderService {
     }
 
     // ─── Process single reminder ───
-    private async sendReminder(reminder: any) {
+    private async sendReminder(reminder: EventReminder & { user: User }) {
         const eventDate = new Date(reminder.eventDate);
         const daysUntil = Math.ceil((eventDate.getTime() - Date.now()) / 86400000);
 
@@ -189,7 +190,6 @@ export class EventReminderService {
         eventDate: Date,
         sourceOrderId: string,
     ) {
-        const daysUntil = Math.ceil((eventDate.getTime() - Date.now()) / 86400000);
         // Schedule next reminder at: event_date + 300 days (for next year)
         const nextYearEventDate = new Date(eventDate);
         nextYearEventDate.setFullYear(nextYearEventDate.getFullYear() + 1);

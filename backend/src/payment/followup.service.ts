@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaClient } from '@prisma/client';
+import { FollowUpChannel, FollowUpOutcome } from '@prisma/client';
 
 export class CreateFollowUpDto {
-    channel?: any;
-    outcome?: any;
+    channel?: FollowUpChannel;
+    outcome?: FollowUpOutcome;
     note!: string;
     nextFollowUpAt?: Date | string;
     attachmentUrl?: string;
@@ -24,7 +24,7 @@ export class FollowUpService {
         const now = new Date();
 
         // 1. Criar Log
-        const log = await (this.prisma as any).paymentFollowUpLog.create({
+        const log = await this.prisma.paymentFollowUpLog.create({
             data: {
                 orderId,
                 createdById: adminId,
@@ -41,7 +41,7 @@ export class FollowUpService {
             where: { id: orderId },
             data: {
                 lastPaymentFollowUpAt: now,
-            } as any,
+            },
         });
 
         return log;
@@ -51,7 +51,7 @@ export class FollowUpService {
      * Lista todos os logs de uma Order específica (Timeline).
      */
     async listFollowUps(orderId: string) {
-        return (this.prisma as any).paymentFollowUpLog.findMany({
+        return this.prisma.paymentFollowUpLog.findMany({
             where: { orderId },
             orderBy: { createdAt: 'desc' },
         });
@@ -64,7 +64,7 @@ export class FollowUpService {
         const now = new Date();
 
         // logs onde nextFollowUpAt <= now ("A seguir")
-        const dueLogs = await (this.prisma as any).paymentFollowUpLog.findMany({
+        const dueLogs = await this.prisma.paymentFollowUpLog.findMany({
             where: {
                 nextFollowUpAt: { lte: now },
             },

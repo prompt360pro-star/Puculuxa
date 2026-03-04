@@ -10,6 +10,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { PaymentService } from './payment.service';
 import * as crypto from 'crypto';
 import * as Sentry from '@sentry/node';
+import type { Request } from 'express';
 
 interface AppyPayWebhookPayload {
     id: string;             // Charge ID do AppyPay (= nosso providerRef)
@@ -17,7 +18,7 @@ interface AppyPayWebhookPayload {
     merchantTransactionId: string; // Nosso merchantRef (PUC-{ts}-{rand})
     amount: number;
     reference?: string;
-    [key: string]: any;     // Campos adicionais para forward-compatibility
+    [key: string]: unknown;     // Campos adicionais para forward-compatibility
 }
 
 const SUCCESS_STATUSES = new Set(['COMPLETED', 'PAID', 'SUCCESS', 'APPROVED']);
@@ -40,7 +41,7 @@ export class WebhookController {
      */
     @Post('appypay')
     @HttpCode(200)
-    async handleAppyPayWebhook(@Req() req: any, @Body() body: AppyPayWebhookPayload) {
+    async handleAppyPayWebhook(@Req() req: Request & { rawBody?: Buffer }, @Body() body: AppyPayWebhookPayload) {
 
         // --- 1. Signature Validation (Always-200 Approach) ---
         const secret = process.env.APPYPAY_WEBHOOK_SECRET;
@@ -119,9 +120,10 @@ export class WebhookController {
                 // Unknown status — log and ignore (no state change)
                 this.logger.warn(`[Webhook] Unknown status '${status}' for payment ${payment.id} — no action taken`);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             // CRITICAL: Never propagate errors to the gateway — always return 200
-            this.logger.error(`[Webhook] Internal error processing AppyPay webhook: ${error?.message}`, error?.stack);
+            const err = error as Error;
+            this.logger.error(`[Webhook] Internal error processing AppyPay webhook: ${err?.message}`, err?.stack);
         }
 
         return { received: true };

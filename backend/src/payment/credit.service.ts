@@ -3,9 +3,8 @@ import {
     Logger,
     NotFoundException,
     BadRequestException,
-    ForbiddenException,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceService } from './invoice.service';
 import { PaymentService } from './payment.service';
@@ -24,8 +23,7 @@ export class CreditService {
 
     constructor(
         private readonly prisma: PrismaService,
-        private readonly invoiceService: InvoiceService,
-        private readonly paymentService: PaymentService,
+        private readonly invoiceService: InvoiceService
     ) { }
 
     // ─── a) Mark order as IN_CREDIT ───

@@ -1,11 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { OrderService } from './order.service';
+import { OrderService, OrderStatus } from './order.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 
 describe('OrderService', () => {
   let service: OrderService;
-  let prisma: PrismaService;
 
   const mockPrismaService = {
     order: {
@@ -30,7 +29,6 @@ describe('OrderService', () => {
     }).compile();
 
     service = module.get<OrderService>(OrderService);
-    prisma = module.get<PrismaService>(PrismaService);
   });
 
   afterEach(() => {
@@ -91,7 +89,7 @@ describe('OrderService', () => {
       const updatedOrder = { id: '1', status: 'PRODUCING' };
       mockPrismaService.order.update.mockResolvedValue(updatedOrder);
 
-      const result = await service.updateStatus('1', 'PRODUCING');
+      const result = await service.updateStatus('1', OrderStatus.PRODUCING);
 
       expect(result).toEqual(updatedOrder);
       expect(mockPrismaService.order.update).toHaveBeenCalledWith({

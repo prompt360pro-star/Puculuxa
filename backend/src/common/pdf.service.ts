@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PdfService {

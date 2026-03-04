@@ -1,10 +1,26 @@
-import { Controller, Get, Post, Body, Req, Res, Headers, UseGuards, Param, Query, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Headers, HttpCode, Get, Query, Param, UseGuards, Req, Res, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { WhatsAppService } from './whatsapp.service';
+import { WhatsAppMessageStatus } from '@prisma/client';
+
+interface WhatsAppWebhookBody {
+    object?: string;
+    entry?: Array<{
+        changes?: Array<{
+            value?: {
+                statuses?: Array<{
+                    id?: string;
+                    status?: string;
+                    errors?: unknown;
+                }>;
+            };
+        }>;
+    }>;
+}
 
 interface RawBodyRequest extends Request {
     rawBody?: Buffer;
@@ -38,19 +54,16 @@ export class WhatsAppController {
 
     // ─── POST /whatsapp/webhook — Delivery status callbacks ──────────────────
     @Post('webhook')
+    @HttpCode(200) // Always return 200, Meta retries on any non-200
     async handleWebhook(
         @Req() req: RawBodyRequest,
-        @Res() res: Response,
         @Headers('x-hub-signature-256') signature?: string,
-    ): Promise<void> {
-        // ALWAYS 200 — Meta retries on any non-200
-        res.status(200).send('EVENT_RECEIVED');
-
+    ): Promise<string> {
         // Validate HMAC signature when secret is configured
         if (this.APP_SECRET && req.rawBody) {
             if (!signature) {
                 this.logger.warn('[WhatsApp] Webhook received without signature — ignoring');
-                return;
+                return 'EVENT_RECEIVED';
             }
             try {
                 const hmac = crypto.createHmac('sha256', this.APP_SECRET);
@@ -58,11 +71,12 @@ export class WhatsAppController {
                 const checksum = Buffer.from(signature, 'utf8');
                 if (checksum.length !== digest.length || !crypto.timingSafeEqual(digest, checksum)) {
                     this.logger.warn('[WhatsApp] Invalid webhook signature — ignoring');
-                    return;
+                    return 'EVENT_RECEIVED';
                 }
-            } catch (e: any) {
-                this.logger.error('[WhatsApp] Signature check crashed', e.message);
-                return;
+            } catch (e: unknown) {
+                const err = e as Error;
+                this.logger.error('[WhatsApp] Signature check crashed', err.message);
+                return 'EVENT_RECEIVED';
             }
         } else if (!this.APP_SECRET) {
             this.logger.warn('[WhatsApp] No APP_SECRET configured — skipping signature check (dev mode)');
@@ -70,7 +84,7 @@ export class WhatsAppController {
 
         // Process status callbacks
         try {
-            const body = req.body as any;
+            const body = req.body as WhatsAppWebhookBody;
             if (body?.object === 'whatsapp_business_account' && Array.isArray(body.entry)) {
                 for (const entry of body.entry) {
                     for (const change of (entry.changes ?? [])) {
@@ -79,9 +93,9 @@ export class WhatsAppController {
                             const rawStatus: string | undefined = statusObj.status;
                             if (!wamid || !rawStatus) continue;
 
-                            const status = rawStatus.toUpperCase(); // DELIVERED, READ, FAILED
+                            const status = rawStatus.toUpperCase() as WhatsAppMessageStatus; // DELIVERED, READ, FAILED
 
-                            const found = await (this.prisma as any).whatsAppLog.findUnique({
+                            const found = await this.prisma.whatsAppLog.findUnique({
                                 where: { waMessageId: wamid },
                             });
                             if (!found) {
@@ -89,14 +103,14 @@ export class WhatsAppController {
                                 continue;
                             }
 
-                            const updateData: Record<string, any> = { status, webhookStatusRaw: statusObj };
+                            const updateData: Record<string, unknown> = { status, webhookStatusRaw: statusObj as unknown };
                             if (status === 'DELIVERED') updateData.deliveredAt = new Date();
                             if (status === 'READ') updateData.readAt = new Date();
                             if (status === 'FAILED') {
                                 updateData.errorMessage = JSON.stringify(statusObj.errors ?? 'FAILED with no details');
                             }
 
-                            await (this.prisma as any).whatsAppLog.update({
+                            await this.prisma.whatsAppLog.update({
                                 where: { waMessageId: wamid },
                                 data: updateData,
                             });
@@ -104,9 +118,11 @@ export class WhatsAppController {
                     }
                 }
             }
-        } catch (err: any) {
-            this.logger.error('[WhatsApp] Error processing webhook payload', err.message);
+        } catch (err: unknown) {
+            const error = err as Error;
+            this.logger.error('[WhatsApp] Error processing webhook payload', error.message);
         }
+        return 'EVENT_RECEIVED';
     }
 
     // ─── GET /whatsapp/logs — History by orderId ──────────────────────────────
@@ -120,8 +136,8 @@ export class WhatsAppController {
     ) {
         const take = Number(limit);
         const skip = (Number(page) - 1) * take;
-        const [data, total] = await Promise.all([
-            (this.prisma as any).whatsAppLog.findMany({
+        const [logs, total] = await Promise.all([
+            this.prisma.whatsAppLog.findMany({
                 where: { orderId },
                 orderBy: { createdAt: 'desc' },
                 take,
@@ -139,9 +155,9 @@ export class WhatsAppController {
                     createdAt: true,
                 },
             }),
-            (this.prisma as any).whatsAppLog.count({ where: { orderId } }),
+            this.prisma.whatsAppLog.count({ where: { orderId } }),
         ]);
-        return { data, meta: { total, page: Number(page), limit: take } };
+        return { data: logs, meta: { total, page: Number(page), limit: take } };
     }
 
     // ─── GET /whatsapp/logs/recent — Global recent audit feed ────────────────
@@ -154,8 +170,8 @@ export class WhatsAppController {
     ) {
         const take = Number(limit);
         const skip = (Number(page) - 1) * take;
-        const [data, total] = await Promise.all([
-            (this.prisma as any).whatsAppLog.findMany({
+        const [logs, total] = await Promise.all([
+            this.prisma.whatsAppLog.findMany({
                 orderBy: { createdAt: 'desc' },
                 take,
                 skip,
@@ -173,9 +189,9 @@ export class WhatsAppController {
                     createdAt: true,
                 },
             }),
-            (this.prisma as any).whatsAppLog.count(),
+            this.prisma.whatsAppLog.count(),
         ]);
-        return { data, meta: { total, page: Number(page), limit: take } };
+        return { data: logs, meta: { total, page: Number(page), limit: take } };
     }
 
     // ─── POST /whatsapp/admin/send/:orderId — Manual ADMIN trigger ───────────
@@ -204,8 +220,8 @@ export class WhatsAppController {
     @Post('admin/retry/:logId')
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ADMIN')
-    async retryFailedLog(@Param('logId') logId: string) {
-        const log = await (this.prisma as any).whatsAppLog.findUnique({
+    async retryMessage(@Param('logId') logId: string) {
+        const log = await this.prisma.whatsAppLog.findUnique({
             where: { id: logId },
         });
 
@@ -225,7 +241,7 @@ export class WhatsAppController {
         }
 
         // Clear the idempotency key so the service will re-dispatch
-        await (this.prisma as any).whatsAppLog.update({
+        await this.prisma.whatsAppLog.update({
             where: { id: logId },
             data: { idempotencyKey: null, status: 'PENDING', errorMessage: null },
         });
@@ -234,7 +250,7 @@ export class WhatsAppController {
             to: log.recipientPhone,
             templateName: log.templateName,
             orderId: log.orderId ?? undefined,
-            variables: Array.isArray(log.variables) ? log.variables : undefined,
+            variables: Array.isArray(log.variables) ? (log.variables as (string | number)[]) : undefined,
             languageCode: log.languageCode,
         });
     }

@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma, PaymentStatus, PaymentMethod, PayoutStatus } from '@prisma/client';
 
 @Injectable()
 export class ExportService {
@@ -27,7 +28,7 @@ export class ExportService {
      * Helper: sanitizeText
      * Evita quebra de linha ou aspas inviabilizem o CSV.
      */
-    sanitizeText(text: any): string {
+    sanitizeText(text: unknown): string {
         if (text === null || text === undefined) return '';
         const str = String(text);
         // Se tiver vírgula, aspa dupla ou quebra de linha, envolve com aspas e escapa as aspas.
@@ -41,7 +42,7 @@ export class ExportService {
      * Helper: toCsv
      * Gera o conteúdo final do CSV.
      */
-    toCsv(rows: Record<string, any>[], headers: string[]): string {
+    toCsv(rows: Record<string, unknown>[], headers: string[]): string {
         if (!rows || rows.length === 0) {
             return headers.join(',') + '\n';
         }
@@ -95,14 +96,14 @@ export class ExportService {
     /**
      * A) Payments Ledger
      */
-    async exportPayments(from: string, to: string, status?: any, method?: any): Promise<string> {
+    async exportPayments(from: string, to: string, status?: PaymentStatus, method?: PaymentMethod): Promise<string> {
         const { fromDate, toDate } = this.validateDateRange(from, to);
 
         // Assegura que toDate cubra o dia inteiro
         const endOfDay = new Date(toDate);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const where: any = {
+        const where: Prisma.PaymentWhereInput = {
             createdAt: { gte: fromDate, lte: endOfDay },
         };
         if (status) where.status = status;
@@ -165,7 +166,7 @@ export class ExportService {
         const endOfDay = new Date(toDate);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const where: any = {
+        const where: Prisma.InvoiceWhereInput = {
             issuedAt: { gte: fromDate, lte: endOfDay },
         };
         if (prefix) where.prefix = prefix;
@@ -207,12 +208,12 @@ export class ExportService {
     /**
      * C) Payouts Ledger
      */
-    async exportPayouts(from: string, to: string, status?: any): Promise<string> {
+    async exportPayouts(from: string, to: string, status?: PayoutStatus): Promise<string> {
         const { fromDate, toDate } = this.validateDateRange(from, to);
         const endOfDay = new Date(toDate);
         endOfDay.setHours(23, 59, 59, 999);
 
-        const where: any = {
+        const where: Prisma.PayoutWhereInput = {
             // Usa valueDate preferencialmente para reporting de fecho de caixa,
             // fallback para createdAt se o user quiser filtrar por data de criação.
             // Assumiremos createdAt simplificado aqui para apanhar os drafts
@@ -249,7 +250,7 @@ export class ExportService {
             'itemsCount',
         ];
 
-        const rows = payouts.map((p: any) => ({
+        const rows = payouts.map((p) => ({
             payoutId: p.id,
             provider: p.provider,
             status: p.status,
@@ -265,7 +266,7 @@ export class ExportService {
             bankReference: p.bankReference,
             valueDate: this.formatDateISO(p.valueDate),
             createdAt: this.formatDateISO(p.createdAt),
-            itemsCount: (p as any)._count?.items || 0,
+            itemsCount: p._count?.items || 0,
         }));
 
         return this.toCsv(rows, headers);
@@ -295,7 +296,7 @@ export class ExportService {
             'amount',
         ];
 
-        const rows = items.map((i: any) => ({
+        const rows = items.map((i) => ({
             payoutId: i.payoutId,
             paymentId: i.paymentId,
             paymentCreatedAt: this.formatDateISO(i.payment?.createdAt),

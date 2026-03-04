@@ -29,7 +29,7 @@ export class FeedbackService {
   async getProductReviews(productId: string) {
     // Futura expansão: feedbacks por produto específico
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _pid = productId;
+    // const _pid = productId;
     return this.findAll();
   }
 

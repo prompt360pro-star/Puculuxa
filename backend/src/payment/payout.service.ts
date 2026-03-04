@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { PaymentMethod, PayoutStatus, PayoutProvider, PayoutSource } from '@prisma/client';
 
 export class CreateDraftPayoutDto {
@@ -108,10 +109,10 @@ export class PayoutService {
             methods = ['APPYPAY_GPO', 'APPYPAY_REF'] as PaymentMethod[]
         } = dto;
 
-        const whereClause: any = {
+        const whereClause: Prisma.PaymentWhereInput = {
             status: 'SUCCESS',
             method: { in: methods },
-            PayoutItem: {
+            payoutItem: {
                 is: null // Payment without related PayoutItem
             }
         };

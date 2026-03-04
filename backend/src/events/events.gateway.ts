@@ -21,11 +21,11 @@ export class EventsGateway
 
   private logger: Logger = new Logger('EventsGateway');
 
-  afterInit(server: Server) {
+  afterInit() {
     this.logger.log('WebSocket Gateway Initialized');
   }
 
-  handleConnection(client: Socket, ...args: any[]) {
+  handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
   }
 
@@ -34,7 +34,7 @@ export class EventsGateway
   }
 
   // Generic method to emit events to all connected clients (e.g. Admins on the dashboard)
-  notifyAdmins(event: string, payload: any) {
+  notifyAdmins(event: string, payload: unknown) {
     this.server.emit(event, payload);
     this.logger.log(`Emitted [${event}] to clients.`);
   }

@@ -14,7 +14,7 @@ export class WhatsAppAnalyticsController {
         const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
         const [logs24h, recent] = await Promise.all([
-            (this.prisma as any).whatsAppLog.findMany({
+            this.prisma.whatsAppLog.findMany({
                 where: { createdAt: { gte: since24h } },
                 select: {
                     id: true,
@@ -26,7 +26,7 @@ export class WhatsAppAnalyticsController {
                     createdAt: true,
                 },
             }),
-            (this.prisma as any).whatsAppLog.findMany({
+            this.prisma.whatsAppLog.findMany({
                 orderBy: { createdAt: 'desc' },
                 take: 30,
                 select: {
@@ -46,11 +46,11 @@ export class WhatsAppAnalyticsController {
 
         // ── KPIs ──────────────────────────────────────────────────────────────
         const kpis = {
-            sent24h: logs24h.filter((l: any) => l.status === 'SENT').length,
-            delivered24h: logs24h.filter((l: any) => l.status === 'DELIVERED').length,
-            read24h: logs24h.filter((l: any) => l.status === 'READ').length,
-            failed24h: logs24h.filter((l: any) => l.status === 'FAILED').length,
-            skipped24h: logs24h.filter((l: any) => l.status === 'SKIPPED').length,
+            sent24h: logs24h.filter((l) => l.status === 'SENT').length,
+            delivered24h: logs24h.filter((l) => l.status === 'DELIVERED').length,
+            read24h: logs24h.filter((l) => l.status === 'READ').length,
+            failed24h: logs24h.filter((l) => l.status === 'FAILED').length,
+            skipped24h: logs24h.filter((l) => l.status === 'SKIPPED').length,
         };
 
         // ── By Template ───────────────────────────────────────────────────────

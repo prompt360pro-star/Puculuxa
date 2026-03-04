@@ -16,10 +16,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-# Prisma v7 usa adapter-pg natively ou folder node_modules/.prisma
+# Prisma v7 client + engine
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY prisma ./prisma
 COPY package.json ./
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 EXPOSE 3000
-CMD ["node", "dist/main.js"]
+CMD ["./entrypoint.sh"]

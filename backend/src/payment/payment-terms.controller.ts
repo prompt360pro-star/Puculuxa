@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Body, UseGuards, Param, Query, BadRequestException, Req } from '@nestjs/common';
 import { PaymentTermsService, OverrideTermsDto } from './payment-terms.service';
+import { ClientSegment } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,14 +23,14 @@ export class PaymentTermsController {
         if (!segment) {
             throw new BadRequestException('Parâmetro segment inválido (B2C, B2B, GOVERNMENT)');
         }
-        return this.paymentTermsService.resolveConfig(segment as any, eventType);
+        return this.paymentTermsService.resolveConfig(segment as ClientSegment, eventType);
     }
 
     // ─── ADMIN: Actualizar configuração (Upsert) ───
     @Put()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles('ADMIN')
-    async upsertConfig(@Body() body: any) {
+    async upsertConfig(@Body() body: Partial<OverrideTermsDto> & { segment: string; eventType?: string }) {
         const { segment, eventType, ...data } = body;
 
         if (!segment) {
@@ -38,14 +39,15 @@ export class PaymentTermsController {
 
         const eType = eventType || null;
 
-        // Prisma Upsert with composite null string workaround
+        // TODO: remove any — PaymentTermsConfig exists in code but not in schema.prisma. Revisit this schema definition.
         const updated = await (this.prisma as any).paymentTermsConfig.upsert({
             where: {
                 segment_eventType: {
-                    segment: segment as any,
+                    segment: segment as ClientSegment,
                     eventType: eType,
                 },
             },
+            // TODO: remove any — properties not strongly typed in schema
             update: {
                 depositPercent: data.depositPercent ?? 50,
                 depositDueDays: data.depositDueDays ?? 1,
@@ -56,7 +58,7 @@ export class PaymentTermsController {
                 allowCredit: data.allowCredit ?? false,
             },
             create: {
-                segment: segment as any,
+                segment: segment as ClientSegment,
                 eventType: eType,
                 depositPercent: data.depositPercent ?? 50,
                 depositDueDays: data.depositDueDays ?? 1,
@@ -66,7 +68,7 @@ export class PaymentTermsController {
                 allowBankTransfer: data.allowBankTransfer ?? true,
                 allowCredit: data.allowCredit ?? false,
             },
-        });
+        } as any);
 
         return updated;
     }
@@ -78,9 +80,9 @@ export class PaymentTermsController {
     async applyTermsToOrder(
         @Param('orderId') orderId: string,
         @Body() dto: OverrideTermsDto,
-        @Req() req: Request
+        @Req() req: Request & { user?: { id?: string } }
     ) {
-        const adminId = (req as any).user?.id || 'ADMIN';
+        const adminId = req.user?.id || 'ADMIN';
         return this.paymentTermsService.applyTermsToOrder(orderId, adminId, dto);
     }
 }

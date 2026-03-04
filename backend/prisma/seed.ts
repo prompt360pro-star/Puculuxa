@@ -27,7 +27,7 @@ async function main() {
 
     // 2. Create Users
     const adminPassword = await bcrypt.hash('Admin123!', 10);
-    const admin = await prisma.user.upsert({
+    await prisma.user.upsert({
         where: { email: 'admin@puculuxa.ao' },
         update: {},
         create: {
@@ -39,7 +39,7 @@ async function main() {
     });
 
     const customerPassword = await bcrypt.hash('Cliente123!', 10);
-    const customer = await prisma.user.upsert({
+    await prisma.user.upsert({
         where: { email: 'cliente@test.ao' },
         update: {},
         create: {
@@ -51,7 +51,6 @@ async function main() {
     });
 
     // 3. Create Products
-    const categories = ['bolos', 'doces'];
     const products = [
         {
             name: 'Bolo de Aniversário Especial',

@@ -12,6 +12,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     const softDeleteModels = ['Product', 'Quotation', 'User', 'Order'];
 
+    // TODO: remove any — requires Prisma v7 type fix for $extends proxy typings with dynamic models
     const extendedClient: any = this.$extends({
       query: {
         $allModels: {

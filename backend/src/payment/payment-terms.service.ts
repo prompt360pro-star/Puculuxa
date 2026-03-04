@@ -1,12 +1,16 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PrismaClient, PaymentStatus } from '@prisma/client';
+import { ClientSegment, Payment } from '@prisma/client';
 
 export class OverrideTermsDto {
-    segment?: any;
+    segment?: ClientSegment;
     depositPercent?: number;
     depositDueDays?: number;
     balanceDueDays?: number;
+    creditDueDays?: number;
+    allowGpo?: boolean;
+    allowBankTransfer?: boolean;
+    allowCredit?: boolean;
 }
 
 @Injectable()
@@ -22,8 +26,9 @@ export class PaymentTermsService {
      * 2) segment + null (default do segmento)
      * 3) Erro se não existir fallback (na prática, Seed deve garantir).
      */
-    async resolveConfig(segment: any, eventType?: string | null) {
+    async resolveConfig(segment: ClientSegment, eventType?: string | null) {
         if (eventType) {
+            // TODO: remove any — PaymentTermsConfig exists in code but not in schema.prisma. Revisit this schema definition.
             const specific = await (this.prisma as any).paymentTermsConfig.findUnique({
                 where: {
                     segment_eventType: {
@@ -35,6 +40,7 @@ export class PaymentTermsService {
             if (specific) return specific;
         }
 
+        // TODO: remove any — PaymentTermsConfig exists in code but not in schema.prisma. Revisit this schema definition.
         const defaultConfig = await (this.prisma as any).paymentTermsConfig.findUnique({
             where: {
                 segment_eventType: {
@@ -47,6 +53,7 @@ export class PaymentTermsService {
         // Como o Prisma unique usa null nos indíces condicionalmente de acordo com a base de dados
         if (!defaultConfig) {
             // Fallback manual query
+            // TODO: remove any — PaymentTermsConfig exists in code but not in schema.prisma. Revisit this schema definition.
             const backups = await (this.prisma as any).paymentTermsConfig.findMany({
                 where: { segment, eventType: null }
             });
@@ -65,20 +72,21 @@ export class PaymentTermsService {
         const order = await this.prisma.order.findUnique({ where: { id: orderId } });
         if (!order) throw new NotFoundException(`Order ${orderId} não encontrado`);
 
-        const segment = override?.segment ?? (order as any).clientSegment;
+        const segment = override?.segment ?? order.clientSegment as ClientSegment;
         const config = await this.resolveConfig(segment, (order as any).eventType);
 
-        const depositPercentApplied = override?.depositPercent ?? config.depositPercent;
-        let depositDueDays = override?.depositDueDays ?? config.depositDueDays;
-        let balanceDueDays = override?.balanceDueDays ?? config.balanceDueDays;
+        const depositPercentApplied = override?.depositPercent ?? (config as any).depositPercent;
+        let depositDueDays = override?.depositDueDays ?? (config as any).depositDueDays;
+        let balanceDueDays = override?.balanceDueDays ?? (config as any).balanceDueDays;
 
         // Regras de Governo: Sinal sempre 0, vai directo para Crédito
         if (segment === 'GOVERNMENT') {
-            depositDueDays = 0;
-            balanceDueDays = 0;
+            depositDueDays = null;
+            balanceDueDays = (config as any).creditDueDays ?? balanceDueDays; // Pode estar vazio e ser substituído no workflow de Aprovação
         }
 
         const now = new Date();
+        // Snapshot
         const depositAmount = parseFloat(((order.total * depositPercentApplied) / 100).toFixed(2));
 
         const depositDueDate = new Date(now);
@@ -87,7 +95,7 @@ export class PaymentTermsService {
         const balanceDueDate = new Date(now);
         balanceDueDate.setDate(balanceDueDate.getDate() + balanceDueDays);
 
-        let creditDueDate = (order as any).creditDueDate;
+        let creditDueDate = order.creditDueDate;
         // Se Governo, auto-sugerir data de crédito (padrão Angolano 60~90 dias)
         if (segment === 'GOVERNMENT' && !creditDueDate) {
             creditDueDate = new Date(now);
@@ -105,7 +113,7 @@ export class PaymentTermsService {
                 creditDueDate: creditDueDate,
                 termsAppliedAt: now,
                 termsAppliedById: adminId || 'SYSTEM',
-            } as any,
+            },
         });
 
         this.logger.log(`Termos de Pagamento aplicados para a Order ${orderId} - Segmento: ${segment}`);
@@ -119,17 +127,17 @@ export class PaymentTermsService {
         const order = await this.prisma.order.findUnique({
             where: { id: orderId },
             include: { payments: true }
-        }) as any;
+        });
 
         if (!order) throw new NotFoundException('Order não encontrado');
 
         // 1) Descobre quanto já foi pago 
         const totalPaid = order.payments
-            .filter((p: any) => p.status === 'SUCCESS')
-            .reduce((sum: number, p: any) => sum + p.amount, 0);
+            .filter((p: Payment) => p.status === 'SUCCESS')
+            .reduce((sum: number, p: Payment) => sum + p.amount, 0);
 
         const remainingTotal = Math.max(order.total - totalPaid, 0);
-        const depositRequired = (order as any).depositAmount ?? 0;
+        const depositRequired = order.depositAmount ?? 0;
 
         // 2) Distribui dinheiro recebido
         const depositPaid = Math.min(totalPaid, depositRequired);
@@ -142,12 +150,12 @@ export class PaymentTermsService {
         // 3) Regras de Atraso (Aging)
         const now = new Date();
         let isOverdueDeposit = false;
-        if ((order as any).depositDueDate && now > (order as any).depositDueDate && depositRemaining > 0) {
+        if (order.depositDueDate && now > order.depositDueDate && depositRemaining > 0) {
             isOverdueDeposit = true;
         }
 
         let isOverdueBalance = false;
-        if ((order as any).balanceDueDate && now > (order as any).balanceDueDate && balanceRemaining > 0) {
+        if (order.balanceDueDate && now > order.balanceDueDate && balanceRemaining > 0) {
             isOverdueBalance = true;
         }
 
@@ -160,17 +168,17 @@ export class PaymentTermsService {
                 required: depositRequired,
                 paid: depositPaid,
                 remaining: depositRemaining,
-                dueDate: (order as any).depositDueDate,
+                dueDate: order.depositDueDate,
                 isSatisfied: isDepositSatisfied,
                 isOverdue: isOverdueDeposit,
             },
             balance: {
                 remaining: balanceRemaining,
-                dueDate: (order as any).balanceDueDate,
+                dueDate: order.balanceDueDate,
                 isOverdue: isOverdueBalance,
             },
-            segment: (order as any).clientSegment,
-            termsAppliedAt: (order as any).termsAppliedAt,
+            segment: order.clientSegment,
+            termsAppliedAt: order.termsAppliedAt,
         };
     }
 }

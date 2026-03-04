@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import axios from 'axios';
 
 @Injectable()
@@ -48,7 +49,7 @@ export class WhatsAppService {
             this.buildIdempotencyKey(params.orderId || null, params.templateName);
 
         // 1) Cooldown check
-        const existingLog = await (this.prisma as any).whatsAppLog.findUnique({
+        const existingLog = await this.prisma.whatsAppLog.findUnique({
             where: { idempotencyKey: cacheKey },
         });
         if (existingLog && ['SENT', 'DELIVERED', 'READ'].includes(existingLog.status)) {
@@ -59,7 +60,7 @@ export class WhatsAppService {
         // 2) Graceful no-credentials mode
         if (!token || !phoneId) {
             this.logger.warn('[WhatsApp] Missing credentials — marking as SKIPPED');
-            const skippedLog = await (this.prisma as any).whatsAppLog.upsert({
+            const skippedLog = await this.prisma.whatsAppLog.upsert({
                 where: { idempotencyKey: cacheKey },
                 update: { status: 'SKIPPED', errorMessage: 'Missing Meta credentials' },
                 create: {
@@ -70,16 +71,16 @@ export class WhatsAppService {
                     status: 'SKIPPED',
                     idempotencyKey: cacheKey,
                     errorMessage: 'Missing Meta credentials',
-                    variables: params.variables ?? null,
+                    variables: params.variables ?? Prisma.DbNull,
                 },
             });
             return { ok: true, skipped: true, logId: skippedLog.id };
         }
 
         // 3) Create PENDING log (with variables for retry support)
-        const pendingLog = await (this.prisma as any).whatsAppLog.upsert({
+        const pendingLog = await this.prisma.whatsAppLog.upsert({
             where: { idempotencyKey: cacheKey },
-            update: { status: 'PENDING', errorMessage: null, variables: params.variables ?? null },
+            update: { status: 'PENDING', errorMessage: null, variables: params.variables ?? Prisma.DbNull },
             create: {
                 orderId: params.orderId,
                 recipientPhone: normalizedPhone,
@@ -87,14 +88,14 @@ export class WhatsAppService {
                 languageCode: lang,
                 status: 'PENDING',
                 idempotencyKey: cacheKey,
-                variables: params.variables ?? null,
+                variables: params.variables ?? Prisma.DbNull,
             },
         });
 
         try {
             const payload: any = {
                 messaging_product: 'whatsapp',
-                to: normalizedPhone,
+                to: normalizedPhone, // Changed from Number(dto.phoneNumber) to normalizedPhone as dto is not defined
                 type: 'template',
                 template: {
                     name: params.templateName,
@@ -116,18 +117,23 @@ export class WhatsAppService {
 
             const waMessageId: string | undefined = res.data?.messages?.[0]?.id;
 
-            await (this.prisma as any).whatsAppLog.update({
+            await this.prisma.whatsAppLog.update({
                 where: { id: pendingLog.id },
                 data: { status: 'SENT', sentAt: new Date(), waMessageId },
             });
 
             return { ok: true, logId: pendingLog.id, waMessageId };
-        } catch (err: any) {
-            const errorMsg = err.response?.data?.error?.message || err.message;
-            this.logger.error(`[WhatsApp] Failed to send ${params.templateName}: ${errorMsg}`);
-            await (this.prisma as any).whatsAppLog.update({
+        } catch (err: unknown) {
+            const error = err as Error;
+            const errorMsg = (axios.isAxiosError(err) && err.response?.data?.error?.message) || error.message;
+            this.logger.error(`[WhatsApp] Failed to send template ${params.templateName} to ${params.to}: ${errorMsg}`);
+
+            await this.prisma.whatsAppLog.update({
                 where: { id: pendingLog.id },
-                data: { status: 'FAILED', errorMessage: errorMsg },
+                data: {
+                    status: 'FAILED',
+                    errorMessage: errorMsg,
+                },
             });
             return { ok: false, logId: pendingLog.id };
         }

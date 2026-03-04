@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppyPayProvider } from './providers/appypay.provider';
+import { PaymentMethod, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class PaymentService {
@@ -61,7 +62,7 @@ export class PaymentService {
     async createPayment(
         orderId: string,
         amount: number,
-        method: string,
+        method: PaymentMethod | string,
         metadata?: Record<string, any>,
     ) {
         const merchantRef = this.generateMerchantRef();
@@ -80,8 +81,8 @@ export class PaymentService {
             data: {
                 orderId,
                 amount,
-                method: method as any,
-                status: 'PENDING',
+                method: method as PaymentMethod,
+                status: PaymentStatus.PENDING,
                 merchantRef,
                 idempotencyKey,
                 metadata: metadata ?? undefined,
@@ -192,8 +193,8 @@ export class PaymentService {
         const existing = await this.prisma.payment.findFirst({
             where: {
                 orderId,
-                method: 'BANK_TRANSFER' as any,
-                status: 'AWAITING_PROOF' as any
+                method: PaymentMethod.BANK_TRANSFER,
+                status: PaymentStatus.AWAITING_PROOF
             },
             orderBy: { createdAt: 'desc' },
         });
@@ -217,8 +218,8 @@ export class PaymentService {
             data: {
                 orderId,
                 amount,
-                method: 'BANK_TRANSFER' as any,
-                status: 'AWAITING_PROOF' as any,
+                method: PaymentMethod.BANK_TRANSFER,
+                status: PaymentStatus.AWAITING_PROOF,
                 merchantRef,
                 idempotencyKey,
             },

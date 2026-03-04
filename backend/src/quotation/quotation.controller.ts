@@ -22,6 +22,15 @@ import { RolesGuard, Roles } from '../auth/roles.guard';
 import { PdfService } from '../common/pdf.service';
 import { ImageService } from '../common/image.service';
 import type { Response, Request } from 'express';
+export interface AuthUser {
+    id?: string;
+    sub?: string;
+    role?: string;
+    [key: string]: unknown;
+}
+export interface AuthRequest extends Request {
+    user?: AuthUser;
+}
 import {
   CreateQuotationDto,
   UpdateQuotationStatusDto,
@@ -52,8 +61,8 @@ export class QuotationController {
   // ─── Criar Orçamento ───
   @ApiOperation({ summary: 'Submeter novo orçamento' })
   @Post()
-  create(@Body() dto: CreateQuotationDto, @Req() req: Request) {
-    const userId = (req as any).user?.id || null;
+  create(@Body() dto: CreateQuotationDto, @Req() req: AuthRequest) {
+    const userId = req.user?.id;
     return this.quotationService.create(dto, userId);
   }
 
@@ -84,9 +93,9 @@ export class QuotationController {
   @ApiOperation({ summary: 'Listar orçamentos do cliente autenticado' })
   @UseGuards(JwtAuthGuard)
   @Get('my')
-  getMyQuotations(@Req() req: Request) {
-    const userId = (req as any).user?.id || (req as any).user?.sub;
-    return this.quotationService.getByCustomer(userId);
+  getMyQuotations(@Req() req: AuthRequest) {
+    const userId = req.user?.id || req.user?.sub;
+    return this.quotationService.getByCustomer(userId as string);
   }
 
   // ─── Detalhe (Admin) ───
@@ -113,10 +122,10 @@ export class QuotationController {
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateQuotationStatusDto,
-    @Req() req: Request,
+    @Req() req: AuthRequest,
   ) {
-    const userId = (req as any).user?.id || 'ANONYMOUS';
-    const userRole = (req as any).user?.role;
+    const userId = req.user?.id || 'ANONYMOUS';
+    const userRole = req.user?.role;
     return this.quotationService.updateStatus(id, dto.status, userId, dto.reason, userRole);
   }
 
@@ -128,9 +137,9 @@ export class QuotationController {
   sendProposal(
     @Param('id') id: string,
     @Body() dto: CreateQuotationVersionDto,
-    @Req() req: Request,
+    @Req() req: AuthRequest,
   ) {
-    const adminId = (req as any).user?.id || 'ADMIN';
+    const adminId = req.user?.id || 'ADMIN';
     return this.quotationService.sendProposal(id, adminId, dto);
   }
 
@@ -138,19 +147,19 @@ export class QuotationController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Post(':id/convert')
-  convertToOrder(@Param('id') id: string, @Req() req: Request) {
-    const adminId = (req as any).user?.id || 'ADMIN';
+  convertToOrder(@Param('id') id: string, @Req() req: AuthRequest) {
+    const adminId = req.user?.id || 'ADMIN';
     return this.quotationService.convertToOrder(id, adminId);
   }
 
   // ─── PDF ───
   @UseGuards(JwtAuthGuard)
   @Get(':id/pdf')
-  async getPdf(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
+  async getPdf(@Param('id') id: string, @Req() req: AuthRequest, @Res() res: Response) {
     const quotation = await this.quotationService.findOne(id);
 
-    const userRole = (req as any).user?.role;
-    const userId = (req as any).user?.id || (req as any).user?.sub;
+    const userRole = req.user?.role;
+    const userId = req.user?.id || req.user?.sub;
 
     if (userRole !== 'ADMIN' && quotation.customerId !== userId) {
       throw new ForbiddenException('Não tem permissão para aceder a este documento.');

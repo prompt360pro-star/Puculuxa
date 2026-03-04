@@ -3,6 +3,7 @@ import * as https from 'https';
 import { calculateQuotation } from '@puculuxa/shared';
 import { PdfService } from '../common/pdf.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { EventsGateway } from '../events/events.gateway';
 import {
   CreateQuotationDto,
@@ -18,7 +19,6 @@ import { EventReminderService } from './event-reminder.service';
 @Injectable()
 export class QuotationService {
   constructor(
-    private readonly pdfService: PdfService,
     private prisma: PrismaService,
     private events: EventsGateway,
     private statusGuard: QuotationStatusGuard,
@@ -109,7 +109,7 @@ export class QuotationService {
   // ─── FIND ALL (admin) ───
   async findAll(page = 1, limit = 20, statusFilter?: string) {
     const skip = (page - 1) * limit;
-    const where: any = { deletedAt: null };
+    const where: Prisma.QuotationWhereInput = { deletedAt: null };
     if (statusFilter) where.status = statusFilter;
 
     const [data, total] = await Promise.all([

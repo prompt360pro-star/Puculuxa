@@ -8,8 +8,6 @@ jest.mock('bcrypt');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: PrismaService;
-  let jwtService: JwtService;
 
   const mockPrismaService = {
     user: {
@@ -21,6 +19,7 @@ describe('AuthService', () => {
 
   const mockJwtService = {
     sign: jest.fn(),
+    verify: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -33,8 +32,6 @@ describe('AuthService', () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prisma = module.get<PrismaService>(PrismaService);
-    jwtService = module.get<JwtService>(JwtService);
   });
 
   afterEach(() => {
@@ -117,7 +114,7 @@ describe('AuthService', () => {
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-refresh-token');
       mockPrismaService.user.update.mockResolvedValue({});
 
-      const result = await service.login(user);
+      const result = await service.login(user as any);
 
       expect(result).toEqual({
         access_token: 'mock-access-token',
