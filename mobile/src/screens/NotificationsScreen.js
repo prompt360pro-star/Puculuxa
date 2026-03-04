@@ -6,7 +6,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Bell, Calendar, Package, ShoppingBag, RefreshCw } from 'lucide-react-native';
 import { Theme, T } from '../theme';
-import { apiClient } from '../config/api.config';
+import { ApiService } from '../services/api';
 
 // ─── Types ───
 const STATUS_LABELS = {
@@ -90,8 +90,8 @@ export const NotificationsScreen = () => {
         isRefresh ? setIsRefreshing(true) : setIsLoading(true);
         setError(null);
         try {
-            const res = await apiClient.get('/auth/reminders');
-            setReminders(res.data || []);
+            const data = await ApiService.getReminders();
+            setReminders(data || []);
         } catch (err) {
             setError('Não foi possível carregar as notificações.');
             console.error('[Notifications] Error:', err);

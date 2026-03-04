@@ -233,6 +233,12 @@ export const ApiService = {
         return user ? JSON.parse(user) : null;
     },
 
+    async getReminders() {
+        const response = await fetchWithAuth(`${BASE_URL}/auth/reminders`);
+        if (!response.ok) throw new Error('Falha ao buscar notificações');
+        return await response.json();
+    },
+
     async postOrder(data) {
         try {
             const response = await fetchWithAuth(`${BASE_URL}/orders`, {

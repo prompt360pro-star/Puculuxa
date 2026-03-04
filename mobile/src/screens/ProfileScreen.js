@@ -97,7 +97,7 @@ export const ProfileScreen = ({ navigation }) => {
             <View style={styles.menuSection}>
                 <MenuItem icon={Settings} label="Editar Perfil" onPress={() => navigation.navigate('EditProfile')} />
                 <MenuItem icon={Heart} label="Favoritos" onPress={() => navigation.navigate('Favorites')} />
-                <MenuItem icon={ClipboardList} label="Histórico de Pedidos" onPress={() => navigation.navigate('OrderHistory')} />
+                <MenuItem icon={ClipboardList} label="Histórico de Pedidos" onPress={() => navigation.navigate('OrdersTab', { screen: 'OrderHistory' })} />
                 <MenuItem icon={Bell} label="Notificações" onPress={() => navigation.navigate('Notifications')} />
                 <MenuItem icon={HelpCircle} label="Ajuda & Suporte" onPress={() => { }} />
             </View>
